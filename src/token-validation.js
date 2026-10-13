@@ -15,12 +15,13 @@ export function isValidUrl(value) {
 
 export function validateTokenForm(form) {
   const decimals = Number(form.decimals);
-  const supply = Number(form.supply);
+  const supplyText = String(form.supply).trim();
+  const supply = Number(supplyText);
+  const validSupply = /^\d+$/.test(supplyText) && Number.isSafeInteger(supply) && supply > 0;
   return form.name.trim().length > 0
     && form.name.trim().length <= 32
     && /^[A-Za-z0-9]{1,10}$/.test(form.symbol.trim())
-    && Number.isSafeInteger(supply)
-    && supply > 0
+    && validSupply
     && Number.isInteger(decimals)
     && decimals >= 0
     && decimals <= 9
