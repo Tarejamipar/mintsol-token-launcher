@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight, Check, CheckCircle2, ChevronDown, Coins, Copy, ExternalLink,
   FileImage, Fingerprint, Info, LoaderCircle, LockKeyhole, Rocket, ShieldCheck,
@@ -35,6 +35,30 @@ function App() {
   const [signature, setSignature] = useState("");
   const [copied, setCopied] = useState("");
   const [form, setForm] = useState({ name: "", symbol: "", supply: "1000000", decimals: "9", uri: "" });
+
+  useEffect(() => {
+    const provider = window.solana;
+    if (!provider?.on) return undefined;
+
+    const handleAccountChanged = (publicKey) => {
+      const nextWallet = publicKey ? new PublicKey(publicKey.toString()).toBase58() : "";
+      if (nextWallet !== wallet) {
+        setWallet(nextWallet);
+        setError("Your wallet account changed. Review the connected account before continuing.");
+      }
+    };
+    const handleDisconnect = () => {
+      setWallet("");
+      setError("Your wallet disconnected. Reconnect it before creating a token.");
+    };
+
+    provider.on("accountChanged", handleAccountChanged);
+    provider.on("disconnect", handleDisconnect);
+    return () => {
+      provider.removeListener?.("accountChanged", handleAccountChanged);
+      provider.removeListener?.("disconnect", handleDisconnect);
+    };
+  }, [wallet]);
 
   const connection = useMemo(() => new Connection(clusterApiUrl(cluster), "confirmed"), [cluster]);
   const feeWallet = import.meta.env.VITE_PLATFORM_FEE_WALLET || "";
@@ -137,8 +161,14 @@ function App() {
       transaction.recentBlockhash = blockhash;
       transaction.partialSign(mint);
 
+      if (!provider.publicKey || new PublicKey(provider.publicKey.toString()).toBase58() !== wallet) {
+        throw new Error("The connected wallet changed before signing. Please reconnect and try again.");
+      }
       setStage("Waiting for wallet approval");
       const signed = await provider.signTransaction(transaction);
+      if (!provider.publicKey || new PublicKey(provider.publicKey.toString()).toBase58() !== wallet) {
+        throw new Error("The connected wallet changed during signing. The transaction was not sent.");
+      }
       setStage("Sending transaction");
       const txSignature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" });
       setStage("Confirming on Solana");
@@ -171,7 +201,7 @@ function App() {
             <option value="devnet">Devnet</option><option value="mainnet-beta">Mainnet</option>
           </select>
         </label>
-        {wallet ? <button onClick={disconnectWallet} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.05] px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/10"><span className="h-2 w-2 rounded-full bg-emerald-400" />{shortKey(wallet)} <ChevronDown size={13} /></button>
+        {wallet ? <button onClick={disconnectWallet} disabled={busy} className="flex items-center gap-2 disabled:opacity-60 rounded-xl border border-white/10 bg-white/[.05] px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/10"><span className="h-2 w-2 rounded-full bg-emerald-400" />{shortKey(wallet)} <ChevronDown size={13} /></button>
           : <button onClick={connectWallet} disabled={walletBusy} className="primary-btn flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs">{walletBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Wallet size={15} />} Connect wallet</button>}
       </div>
     </header>
