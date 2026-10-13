@@ -165,9 +165,9 @@ function App() {
         <span><span className="block text-base font-extrabold tracking-tight">MintSol</span><span className="block text-[10px] font-semibold uppercase tracking-[.22em] text-slate-500">Solana launch studio</span></span>
       </a>
       <div className="flex items-center gap-3">
-        <label className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[.03] px-3 py-2 text-xs text-slate-400 sm:flex">
+        <label className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2 text-[10px] text-slate-400 sm:gap-2 sm:px-3 sm:text-xs">
           <span className={"h-1.5 w-1.5 rounded-full " + (cluster === "devnet" ? "bg-amber-300" : "bg-emerald-300")} />
-          <select aria-label="Solana cluster" className="bg-transparent text-slate-200 outline-none" value={cluster} onChange={(e) => { setCluster(e.target.value); resetForm(); }}>
+          <select aria-label="Solana cluster" disabled={busy} className="max-w-[74px] bg-transparent text-slate-200 outline-none disabled:opacity-60 sm:max-w-none" value={cluster} onChange={(e) => { setCluster(e.target.value); resetForm(); }}>
             <option value="devnet">Devnet</option><option value="mainnet-beta">Mainnet</option>
           </select>
         </label>
