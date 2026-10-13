@@ -29,7 +29,7 @@ Automated unit tests cover token form validation, accepted metadata URI protocol
 ## Run locally
 
 1. Clone the repository and enter its directory.
-2. Install dependencies by running **npm install**.
+2. Install the exact locked dependency versions by running **npm ci**.
 3. Copy .env.example to .env.
    - Windows PowerShell: **Copy-Item .env.example .env**
    - macOS/Linux: **cp .env.example .env**
