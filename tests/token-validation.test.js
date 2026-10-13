@@ -52,7 +52,7 @@ test("validateTokenForm rejects invalid symbols", () => {
 
 test("validateTokenForm requires a positive safe integer supply", () => {
   const base = { name: "Nova", symbol: "NOVA", supply: "100", decimals: "9", uri: "https://example.com/token.json" };
-  for (const supply of ["0", "-1", "1.5", "9007199254740992", ""]) {
+  for (const supply of ["0", "-1", "1.5", "1e3", "1.0", "9007199254740992", ""]) {
     assert.equal(validateTokenForm({ ...base, supply }), false, supply);
   }
 });
