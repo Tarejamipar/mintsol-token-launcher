@@ -16,6 +16,8 @@ MintSol is a Vite + React interface for creating a classic SPL token and its Met
 
 The app does not custody wallet keys. The wallet signs the transaction locally.
 
+Automated unit tests cover token form validation, accepted metadata URI protocols, and wallet-address display formatting. These tests do not replace an end-to-end wallet or on-chain test.
+
 ## Requirements
 
 - Node.js 20 or newer and npm.
@@ -36,7 +38,7 @@ The app does not custody wallet keys. The wallet signs the transaction locally.
 6. Start the development server with **npm run dev**.
 7. Open the local URL printed by Vite, connect your wallet, and create a test token.
 
-Build and preview the production bundle with **npm run build** and **npm run preview**.
+Run automated unit tests with **npm test**. Build and preview the production bundle with **npm run build** and **npm run preview**.
 
 ## Metadata JSON example
 
