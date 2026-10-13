@@ -1,6 +1,6 @@
-# MintForge — Solana Token Launcher
+# MintSol — Solana Token Launcher
 
-MintForge is a Vite + React interface for creating a classic SPL token and its Metaplex Token Metadata account in one wallet-approved transaction.
+MintSol is a Vite + React interface for creating a classic SPL token and its Metaplex Token Metadata account in one wallet-approved transaction.
 
 **Default network: Solana Devnet.** This is a starter application, not an audited smart-contract product. Test thoroughly before any mainnet use.
 
