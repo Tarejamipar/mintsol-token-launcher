@@ -1,0 +1,28 @@
+export function shortKey(value) {
+  if (!value) return "";
+  const text = String(value);
+  return text.length > 12 ? text.slice(0, 5) + "…" + text.slice(-5) : text;
+}
+
+export function isValidUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["https:", "http:", "ipfs:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+export function validateTokenForm(form) {
+  const decimals = Number(form.decimals);
+  const supply = Number(form.supply);
+  return form.name.trim().length > 0
+    && form.name.trim().length <= 32
+    && /^[A-Za-z0-9]{1,10}$/.test(form.symbol.trim())
+    && Number.isSafeInteger(supply)
+    && supply > 0
+    && Number.isInteger(decimals)
+    && decimals >= 0
+    && decimals <= 9
+    && isValidUrl(form.uri.trim());
+}
