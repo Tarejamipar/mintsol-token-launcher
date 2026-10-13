@@ -41,6 +41,7 @@ test("validateTokenForm rejects blank or overlong names", () => {
   const base = { name: "Nova", symbol: "NOVA", supply: "100", decimals: "9", uri: "https://example.com/token.json" };
   assert.equal(validateTokenForm({ ...base, name: " " }), false);
   assert.equal(validateTokenForm({ ...base, name: "N".repeat(33) }), false);
+  assert.equal(validateTokenForm({ ...base, name: "é".repeat(17) }), false);
 });
 
 test("validateTokenForm rejects invalid symbols", () => {
@@ -65,8 +66,9 @@ test("validateTokenForm limits decimals to integers from 0 through 9", () => {
   assert.equal(validateTokenForm({ ...base, decimals: "0" }), true);
 });
 
-test("validateTokenForm rejects invalid metadata URIs", () => {
+test("validateTokenForm rejects invalid or overlong metadata URIs", () => {
   const base = { name: "Nova", symbol: "NOVA", supply: "100", decimals: "9", uri: "https://example.com/token.json" };
   assert.equal(validateTokenForm({ ...base, uri: "javascript:alert(1)" }), false);
   assert.equal(validateTokenForm({ ...base, uri: "invalid" }), false);
+  assert.equal(validateTokenForm({ ...base, uri: "https://example.com/" + "a".repeat(200) }), false);
 });
