@@ -174,7 +174,7 @@ function App() {
     <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
       <a href="#" className="flex items-center gap-3 text-white">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-400/10 text-violet-200"><Sparkles size={21} /></span>
-        <span><span className="block text-base font-extrabold tracking-tight">MintForge</span><span className="block text-[10px] font-semibold uppercase tracking-[.22em] text-slate-500">Solana launch studio</span></span>
+        <span><span className="block text-base font-extrabold tracking-tight">MintSol</span><span className="block text-[10px] font-semibold uppercase tracking-[.22em] text-slate-500">Solana launch studio</span></span>
       </a>
       <div className="flex items-center gap-3">
         <label className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[.03] px-3 py-2 text-xs text-slate-400 sm:flex">
@@ -243,7 +243,7 @@ function App() {
       </div></div></div>}
 
       <footer className="mx-auto mt-12 flex max-w-5xl flex-col items-center justify-between gap-3 border-t border-white/[.07] pt-6 text-[11px] text-slate-600 sm:flex-row">
-        <div className="flex items-center gap-2"><Sparkles size={14} className="text-violet-300" /> MintForge <span>·</span> Built for Solana</div>
+        <div className="flex items-center gap-2"><Sparkles size={14} className="text-violet-300" /> MintSol <span>·</span> Built for Solana</div>
         <div className="flex items-center gap-4"><a href="https://solana.com/docs" target="_blank" rel="noreferrer">Solana docs</a><a href="https://developers.metaplex.com/token-metadata" target="_blank" rel="noreferrer">Metaplex docs</a><span className="flex items-center gap-1"><LockKeyhole size={11} /> Non-custodial</span></div>
       </footer>
     </main>
