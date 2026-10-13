@@ -13,23 +13,13 @@ import {
   createMintToInstruction, getAssociatedTokenAddressSync
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
+import { isValidUrl, shortKey, validateTokenForm } from "./token-validation.js";
 
 const FEE_SOL = 0.02;
 const FEE_LAMPORTS = Math.round(FEE_SOL * LAMPORTS_PER_SOL);
 const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 const DEFAULT_CLUSTER = import.meta.env.VITE_SOLANA_CLUSTER === "mainnet-beta" ? "mainnet-beta" : "devnet";
 
-function shortKey(value) {
-  if (!value) return "";
-  const text = String(value);
-  return text.length > 12 ? text.slice(0, 5) + "…" + text.slice(-5) : text;
-}
-function isValidUrl(value) {
-  try {
-    const url = new URL(value);
-    return ["https:", "http:", "ipfs:"].includes(url.protocol);
-  } catch { return false; }
-}
 function FieldLabel({ children, hint }) {
   return <div className="mb-2 flex items-center justify-between gap-2"><label className="text-sm font-semibold text-slate-200">{children}</label>{hint && <span className="text-xs text-slate-500">{hint}</span>}</div>;
 }
@@ -58,9 +48,7 @@ function App() {
   const supply = Number(form.supply);
   const validSupply = Number.isSafeInteger(supply) && supply > 0;
   const validDecimals = Number.isInteger(decimals) && decimals >= 0 && decimals <= 9;
-  const validForm = form.name.trim().length > 0 && form.name.trim().length <= 32
-    && /^[A-Za-z0-9]{1,10}$/.test(form.symbol.trim())
-    && validSupply && validDecimals && isValidUrl(form.uri.trim());
+  const validForm = validateTokenForm(form);
   const canCreate = Boolean(wallet) && feeWalletValid && validForm && !busy;
 
   async function connectWallet() {
