@@ -13,7 +13,7 @@ import {
   createMintToInstruction, getAssociatedTokenAddressSync
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
-import { isValidUrl, shortKey, validateTokenForm } from "./token-validation.js";
+import { shortKey, validateTokenForm } from "./token-validation.js";
 
 const FEE_SOL = 0.02;
 const FEE_LAMPORTS = Math.round(FEE_SOL * LAMPORTS_PER_SOL);
