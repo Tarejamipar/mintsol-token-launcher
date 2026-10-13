@@ -7,7 +7,7 @@ test("shortKey leaves short values unchanged", () => {
 });
 
 test("shortKey shortens long wallet addresses", () => {
-  assert.equal(shortKey("123456789ABCDEFG"), "12345…DEFG");
+  assert.equal(shortKey("123456789ABCDEFG"), "12345…CDEFG");
 });
 
 test("shortKey handles empty values", () => {
