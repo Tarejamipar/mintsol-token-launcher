@@ -22,43 +22,52 @@ export default async function handler(req, res) {
   }
 
   try {
-    let body;
-    if (req.body && typeof req.body === "object") {
-      // Vercel may parse JSON request bodies before invoking the handler.
-      body = req.body;
-    } else {
-      let raw = typeof req.body === "string" ? req.body : "";
-      if (!raw) {
-        for await (const chunk of req) {
-          raw += chunk;
-          if (raw.length > MAX_IMAGE_BYTES * 1.5) {
-            return send(res, 413, { error: "Image is too large. Choose an image under 2 MB." });
-          }
-        }
-      }
-      body = JSON.parse(raw || "{}");
-    }
-    const { name, symbol, description = "", imageBase64, imageType } = body;
-    if (typeof name !== "string" || !name.trim() || name.trim().length > 32) {
+    const requestUrl = new URL(req.url || "/api/upload-metadata", "https://" + (req.headers.host || "localhost"));
+    const name = requestUrl.searchParams.get("name") || "";
+    const symbol = requestUrl.searchParams.get("symbol") || "";
+    const imageType = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+
+    if (!name.trim() || name.trim().length > 32) {
       return send(res, 400, { error: "Enter a token name of 1–32 characters." });
     }
-    if (typeof symbol !== "string" || !/^[A-Za-z0-9]{1,10}$/.test(symbol.trim())) {
+    if (!/^[A-Za-z0-9]{1,10}$/.test(symbol.trim())) {
       return send(res, 400, { error: "Enter a symbol containing 1–10 letters or numbers." });
     }
-    if (typeof description !== "string" || description.length > 500) {
-      return send(res, 400, { error: "Description must be 500 characters or fewer." });
-    }
-    if (!ALLOWED_TYPES.has(imageType) || typeof imageBase64 !== "string") {
+    if (!ALLOWED_TYPES.has(imageType)) {
       return send(res, 400, { error: "Choose a PNG, JPEG, WebP, or GIF image." });
     }
 
-    const encoded = imageBase64.replace(/^data:[^,]+,/, "");
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
-      return send(res, 400, { error: "The image data is invalid. Please select the image again." });
+    let image;
+    if (Buffer.isBuffer(req.body) || req.body instanceof Uint8Array) {
+      image = Buffer.from(req.body);
+    } else {
+      const chunks = [];
+      let totalBytes = 0;
+      for await (const chunk of req) {
+        const part = Buffer.from(chunk);
+        totalBytes += part.length;
+        if (totalBytes > MAX_IMAGE_BYTES) {
+          return send(res, 413, { error: "Image must be 2 MB or smaller." });
+        }
+        chunks.push(part);
+      }
+      image = Buffer.concat(chunks);
     }
-    const image = Buffer.from(encoded, "base64");
     if (!image.length || image.length > MAX_IMAGE_BYTES) {
-      return send(res, 413, { error: "Image must be smaller than 2 MB." });
+      return send(res, 413, { error: "Image must be 2 MB or smaller." });
+    }
+
+    // Check the file signature as well as the supplied MIME type.
+    const isPng = image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const isJpeg = image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff;
+    const isWebp = image.length >= 12 && image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP";
+    const isGif = image.length >= 6 && ["GIF87a", "GIF89a"].includes(image.toString("ascii", 0, 6));
+    const signatureMatches = (imageType === "image/png" && isPng)
+      || (imageType === "image/jpeg" && isJpeg)
+      || (imageType === "image/webp" && isWebp)
+      || (imageType === "image/gif" && isGif);
+    if (!signatureMatches) {
+      return send(res, 400, { error: "The file contents do not match the selected image type." });
     }
 
     const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" })[imageType];
@@ -81,7 +90,7 @@ export default async function handler(req, res) {
     const metadata = {
       name: name.trim(),
       symbol: symbol.trim().toUpperCase(),
-      description: description.trim() || (name.trim() + " token created with MintSol."),
+      description: name.trim() + " token created with MintSol.",
       image: imageUri,
       properties: { files: [{ uri: imageUri, type: imageType }], category: "image" }
     };
