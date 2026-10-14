@@ -152,10 +152,25 @@ function App() {
       buildStep = "adding the mint-to instruction";
       transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, [], TOKEN_PROGRAM_ID));
 
-      buildStep = "fetching a recent Solana blockhash";
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      buildStep = "requesting a recent blockhash from Solana Devnet";
+      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      const { blockhash, lastValidBlockHeight } = latestBlockhash || {};
+      if (typeof blockhash !== "string" || !blockhash) {
+        throw new Error("The Solana RPC did not return a valid recent blockhash. Switch networks or retry in a moment.");
+      }
+
+      buildStep = "validating the blockhash returned by the RPC";
+      try {
+        // A Solana blockhash is a 32-byte base58 string; this validates both its alphabet and decoded length.
+        new PublicKey(blockhash);
+      } catch {
+        throw new Error("The Solana RPC returned a malformed blockhash. This is an RPC/network response issue, not your wallet address. Switch to Devnet again or retry later.");
+      }
+
+      buildStep = "setting transaction fee payer and blockhash";
       transaction.feePayer = owner;
       transaction.recentBlockhash = blockhash;
+      buildStep = "partially signing the transaction with the newly generated mint key";
       transaction.partialSign(mint);
 
       if (!provider.publicKey || new PublicKey(provider.publicKey.toString()).toBase58() !== wallet) {
@@ -177,7 +192,7 @@ function App() {
     } catch (err) {
       const message = err?.message || "Unknown error";
       setError(message.includes("Non-base58 character")
-        ? `Invalid Solana address while ${typeof buildStep === "string" ? buildStep : "preparing the transaction"}. Please report this exact step; no transaction was sent unless your wallet was asked to sign.`
+        ? `Base58 decoding failed while ${buildStep}. The error was: ${message}. No transaction was broadcast. Please report this exact message.`
         : message);
       setStage("");
     } finally { setBusy(false); }
