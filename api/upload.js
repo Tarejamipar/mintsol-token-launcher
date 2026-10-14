@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   const origin = req.headers.origin;
   const allowedOrigin = process.env.APP_ORIGIN || PRODUCTION_ORIGIN;
-  if (origin && origin !== allowedOrigin) {
+  if (origin !== allowedOrigin) {
     return send(res, 403, { error: "Origin not allowed." });
   }
 
