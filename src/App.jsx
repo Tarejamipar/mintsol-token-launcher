@@ -140,7 +140,7 @@ function App() {
       }));
       transaction.add(createInitializeMintInstruction(mint.publicKey, decimals, owner, owner, TOKEN_PROGRAM_ID));
       transaction.add(createAssociatedTokenAccountInstruction(owner, associatedToken, owner, mint.publicKey, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
-      transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, owner, [], TOKEN_PROGRAM_ID));
+      transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, [], TOKEN_PROGRAM_ID));
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
       transaction.feePayer = owner;
