@@ -150,7 +150,7 @@ function App() {
       buildStep = "adding the associated-token-account instruction";
       transaction.add(createAssociatedTokenAccountInstruction(owner, associatedToken, owner, mint.publicKey, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
       buildStep = "adding the mint-to instruction";
-      transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, [], TOKEN_PROGRAM_ID));
+      transaction.add(createMintToInstruction(mint.publicKey, associatedToken, owner, tokenSupply, [], TOKEN_PROGRAM_ID));
 
       buildStep = "requesting a recent blockhash from Solana Devnet";
       const latestBlockhash = await connection.getLatestBlockhash("confirmed");
