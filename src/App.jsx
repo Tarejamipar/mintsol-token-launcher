@@ -13,6 +13,7 @@ import {
   createMintToInstruction, getAssociatedTokenAddressSync
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
+import { Buffer } from "buffer";
 import { shortKey, validateTokenForm } from "./token-validation.js";
 
 const FEE_SOL = 0.02;
