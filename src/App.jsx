@@ -121,27 +121,37 @@ function App() {
     setBusy(true);
     setStage("");
     try {
-      setStage("Preparing token transaction");
+      buildStep = "validating connected wallet";
       const owner = new PublicKey(wallet);
+      buildStep = "validating configured platform fee address";
       const feeRecipient = new PublicKey(feeWallet);
       const tokenSupply = BigInt(form.supply) * (10n ** BigInt(decimals));
       if (tokenSupply > 18446744073709551615n) throw new Error("Supply multiplied by decimals exceeds the SPL Token uint64 limit.");
 
+      buildStep = "generating token mint";
       const mint = Keypair.generate();
+      buildStep = "deriving associated token account";
       const associatedToken = getAssociatedTokenAddressSync(mint.publicKey, owner);
+      buildStep = "checking mint account rent";
       const rentLamports = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
       const transaction = new Transaction();
 
       // All requested instructions are submitted atomically in one transaction.
+      buildStep = "adding the 0.02 SOL platform fee instruction";
       transaction.add(SystemProgram.transfer({ fromPubkey: owner, toPubkey: feeRecipient, lamports: FEE_LAMPORTS }));
+      buildStep = "adding the mint account instruction";
       transaction.add(SystemProgram.createAccount({
         fromPubkey: owner, newAccountPubkey: mint.publicKey, space: MINT_SIZE,
         lamports: rentLamports, programId: TOKEN_PROGRAM_ID
       }));
+      buildStep = "adding the initialize-mint instruction";
       transaction.add(createInitializeMintInstruction(mint.publicKey, decimals, owner, owner, TOKEN_PROGRAM_ID));
+      buildStep = "adding the associated-token-account instruction";
       transaction.add(createAssociatedTokenAccountInstruction(owner, associatedToken, owner, mint.publicKey, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
+      buildStep = "adding the mint-to instruction";
       transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, [], TOKEN_PROGRAM_ID));
 
+      buildStep = "fetching a recent Solana blockhash";
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
       transaction.feePayer = owner;
       transaction.recentBlockhash = blockhash;
@@ -164,7 +174,10 @@ function App() {
       setSignature(txSignature);
       setStage("Token created successfully");
     } catch (err) {
-      setError(err?.message || "Token creation failed. No success was reported.");
+      const message = err?.message || "Unknown error";
+      setError(message.includes("Non-base58 character")
+        ? `Invalid Solana address while ${typeof buildStep === "string" ? buildStep : "preparing the transaction"}. Please report this exact step; no transaction was sent unless your wallet was asked to sign.`
+        : message);
       setStage("");
     } finally { setBusy(false); }
   }
