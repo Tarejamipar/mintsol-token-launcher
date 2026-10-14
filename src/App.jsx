@@ -120,6 +120,7 @@ function App() {
 
     setBusy(true);
     setStage("");
+    let buildStep = "preparing token transaction";
     try {
       buildStep = "validating connected wallet";
       const owner = new PublicKey(wallet);
