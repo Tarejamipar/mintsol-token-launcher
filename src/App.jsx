@@ -34,6 +34,8 @@ function App() {
   const [mintAddress, setMintAddress] = useState("");
   const [signature, setSignature] = useState("");
   const [copied, setCopied] = useState("");
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
   const [form, setForm] = useState({ name: "", symbol: "", supply: "1000000", decimals: "9", uri: "" });
 
   useEffect(() => {
@@ -67,12 +69,12 @@ function App() {
     catch { return false; }
   }, [feeWallet]);
 
-  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value, ...(["name", "symbol"].includes(key) ? { uri: "" } : {}) }));
   const decimals = Number(form.decimals);
   const supply = Number(form.supply);
   const validSupply = Number.isSafeInteger(supply) && supply > 0;
   const validDecimals = Number.isInteger(decimals) && decimals >= 0 && decimals <= 9;
-  const validForm = validateTokenForm(form);
+  const validForm = validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" }) && Boolean(imageFile);
   const canCreate = Boolean(wallet) && feeWalletValid && validForm && !busy;
 
   async function connectWallet() {
@@ -110,7 +112,7 @@ function App() {
     setSignature("");
     if (!wallet) return setError("Connect your wallet first.");
     if (!feeWalletValid) return setError("Configure VITE_PLATFORM_FEE_WALLET with a valid public Solana address before creating a token.");
-    if (!validForm) return setError("Check the token name, symbol, supply, decimals, and metadata URI.");
+    if (!validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" }) || !imageFile) return setError("Enter valid token details and choose a token image (PNG, JPEG, WebP, or GIF, up to 2 MB).");
 
     const provider = window.solana;
     if (!provider?.publicKey || new PublicKey(provider.publicKey.toString()).toBase58() !== wallet) {
@@ -120,10 +122,34 @@ function App() {
     setBusy(true);
     setStage("");
     try {
-      setStage("Preparing transaction");
+      setStage("Uploading image and creating metadata");
+      const imageDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read the selected image."));
+        reader.readAsDataURL(imageFile);
+      });
+      const imageBase64 = imageDataUrl.includes(",") ? imageDataUrl.slice(imageDataUrl.indexOf(",") + 1) : "";
+      const uploadResponse = await fetch("/api/upload-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          symbol: form.symbol.trim().toUpperCase(),
+          description: form.name.trim() + " token created with MintSol.",
+          imageBase64,
+          imageType: imageFile.type
+        })
+      });
+      const uploadResult = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok || !uploadResult.metadataUri) {
+        throw new Error(uploadResult.error || "Could not upload the image and create token metadata.");
+      }
+      const metadataUri = uploadResult.metadataUri;
+      setForm((current) => ({ ...current, uri: metadataUri }));
+      setStage("Preparing Devnet transaction");
       const owner = new PublicKey(wallet);
       const feeRecipient = new PublicKey(feeWallet);
-      const metadataUri = form.uri.trim();
       const tokenName = form.name.trim();
       const tokenSymbol = form.symbol.trim().toUpperCase();
       const tokenSupply = BigInt(form.supply) * (10n ** BigInt(decimals));
@@ -223,7 +249,32 @@ function App() {
             <div><FieldLabel hint="Up to 32 characters">Token name</FieldLabel><input className="field" maxLength={32} placeholder="e.g. Nova Protocol" value={form.name} onChange={(e) => update("name", e.target.value)} required /></div>
             <div className="grid gap-4 sm:grid-cols-2"><div><FieldLabel hint="1–10 letters/numbers">Ticker symbol</FieldLabel><input className="field uppercase" maxLength={10} placeholder="NOVA" value={form.symbol} onChange={(e) => update("symbol", e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase())} required /></div><div><FieldLabel>Decimals</FieldLabel><select className="field" value={form.decimals} onChange={(e) => update("decimals", e.target.value)}>{[9,8,6,4,2,0].map((n) => <option key={n} value={n}>{n} decimals</option>)}</select></div></div>
             <div><FieldLabel hint="Whole tokens, before decimals">Initial supply</FieldLabel><div className="relative"><input className="field pr-20" type="number" min="1" step="1" placeholder="1000000" value={form.supply} onChange={(e) => update("supply", e.target.value)} required /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{form.symbol || "TOKEN"}</span></div><p className="mt-2 text-[11px] text-slate-500">You will receive the entire initial supply in your connected wallet.</p></div>
-            <div><FieldLabel hint="HTTP, HTTPS or IPFS URI">Metadata JSON URI</FieldLabel><div className="relative"><FileImage size={16} className="absolute left-3 top-3.5 text-slate-500" /><input className="field pl-10" type="url" placeholder="https://your-host.com/token.json" value={form.uri} onChange={(e) => update("uri", e.target.value)} required /></div><p className="mt-2 text-[11px] leading-5 text-slate-500">Host your metadata JSON and image before minting. This app stores the URI on-chain; it does not upload files.</p></div>
+            <div>
+              <FieldLabel hint="PNG, JPG, WebP or GIF · max 2 MB">Token image</FieldLabel>
+              <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-violet-300/30 bg-white/[.02] p-4 hover:bg-white/[.04]">
+                {imagePreview ? <img src={imagePreview} alt="Token image preview" className="h-20 w-20 rounded-xl border border-white/10 object-cover" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[.03] text-violet-200"><FileImage size={26} /></span>}
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-100">{imageFile ? imageFile.name : "Choose token image"}</span><span className="mt-1 block text-xs leading-5 text-slate-500">MintSol uploads the image and automatically creates and hosts the metadata for you.</span><span className="mt-2 inline-flex rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Browse image</span></span>
+                <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  setError("");
+                  setForm((current) => ({ ...current, uri: "" }));
+                  if (!file) return;
+                  if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+                    setImageFile(null); setImagePreview(""); setError("Choose a PNG, JPEG, WebP, or GIF image."); e.target.value = ""; return;
+                  }
+                  if (file.size > 2 * 1024 * 1024) {
+                    setImageFile(null); setImagePreview(""); setError("Image must be 2 MB or smaller."); e.target.value = ""; return;
+                  }
+                  setImageFile(file);
+                  const reader = new FileReader();
+                  reader.onload = () => setImagePreview(String(reader.result || ""));
+                  reader.onerror = () => { setImageFile(null); setImagePreview(""); setError("Could not preview this image. Try another file."); };
+                  reader.readAsDataURL(file);
+                }} />
+              </label>
+              <p className="mt-2 text-[11px] leading-5 text-slate-500">No JSON file or manual URI needed. Your image and metadata are hosted on IPFS before the token transaction is prepared.</p>
+              {form.uri && <p className="mt-2 break-all text-[11px] text-emerald-200">Metadata prepared: <a href={form.uri} target="_blank" rel="noreferrer" className="underline">view hosted metadata</a></p>}
+            </div>
             {error && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[.07] p-3 text-sm leading-5 text-rose-200"><Info size={16} className="mr-2 inline" />{error}</div>}
             {stage && <div aria-live="polite" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] p-3 text-sm text-violet-100">{busy && <LoaderCircle size={15} className="mr-2 inline animate-spin" />}{!busy && <CheckCircle2 size={15} className="mr-2 inline" />}{stage}</div>}
             <button className="primary-btn flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm" type="submit" disabled={!canCreate}>{busy ? <LoaderCircle size={17} className="animate-spin" /> : <Rocket size={17} />}{busy ? "Creating token…" : "Create token"}{!busy && <ArrowUpRight size={16} />}</button>
