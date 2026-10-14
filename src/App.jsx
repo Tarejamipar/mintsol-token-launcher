@@ -12,7 +12,6 @@ import {
   createAssociatedTokenAccountInstruction, createInitializeMintInstruction,
   createMintToInstruction, getAssociatedTokenAddressSync
 } from "@solana/spl-token";
-import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
 import { shortKey, validateTokenForm } from "./token-validation.js";
 
 const FEE_SOL = 0.02;
@@ -74,7 +73,7 @@ function App() {
   const supply = Number(form.supply);
   const validSupply = Number.isSafeInteger(supply) && supply > 0;
   const validDecimals = Number.isInteger(decimals) && decimals >= 0 && decimals <= 9;
-  const validForm = validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" }) && Boolean(imageFile);
+  const validForm = validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" });
   const canCreate = Boolean(wallet) && feeWalletValid && validForm && !busy;
 
   async function connectWallet() {
@@ -112,7 +111,7 @@ function App() {
     setSignature("");
     if (!wallet) return setError("Connect your wallet first.");
     if (!feeWalletValid) return setError("Configure VITE_PLATFORM_FEE_WALLET with a valid public Solana address before creating a token.");
-    if (!validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" }) || !imageFile) return setError("Enter valid token details and choose a token image (PNG, JPEG, WebP, or GIF, up to 2 MB).");
+    if (!validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" })) return setError("Enter a valid token name, symbol, supply, and decimals.");
 
     const provider = window.solana;
     if (!provider?.publicKey || new PublicKey(provider.publicKey.toString()).toBase58() !== wallet) {
@@ -122,22 +121,7 @@ function App() {
     setBusy(true);
     setStage("");
     try {
-      setStage("Uploading image and creating metadata");
-      const uploadUrl = new URL("/api/upload-metadata", window.location.origin);
-      uploadUrl.searchParams.set("name", form.name.trim());
-      uploadUrl.searchParams.set("symbol", form.symbol.trim().toUpperCase());
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": imageFile.type },
-        body: imageFile
-      });
-      const uploadResult = await uploadResponse.json().catch(() => ({}));
-      if (!uploadResponse.ok || !uploadResult.metadataUri) {
-        throw new Error(uploadResult.error || "Could not upload the image and create token metadata.");
-      }
-      const metadataUri = uploadResult.metadataUri;
-      setForm((current) => ({ ...current, uri: metadataUri }));
-      setStage("Preparing Devnet transaction");
+      setStage("Preparing token transaction");
       const owner = new PublicKey(wallet);
       const feeRecipient = new PublicKey(feeWallet);
       const tokenName = form.name.trim();
@@ -147,10 +131,6 @@ function App() {
 
       const mint = Keypair.generate();
       const associatedToken = getAssociatedTokenAddressSync(mint.publicKey, owner);
-      const [metadataAddress] = PublicKey.findProgramAddressSync(
-        [new TextEncoder().encode("metadata"), METADATA_PROGRAM_ID.toBytes(), mint.publicKey.toBytes()],
-        METADATA_PROGRAM_ID
-      );
       const rentLamports = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
       const transaction = new Transaction();
 
@@ -163,14 +143,6 @@ function App() {
       transaction.add(createInitializeMintInstruction(mint.publicKey, decimals, owner, owner, TOKEN_PROGRAM_ID));
       transaction.add(createAssociatedTokenAccountInstruction(owner, associatedToken, owner, mint.publicKey, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
       transaction.add(createMintToInstruction(mint.publicKey, associatedToken, tokenSupply, owner, [], TOKEN_PROGRAM_ID));
-      transaction.add(createCreateMetadataAccountV3Instruction(
-        { metadata: metadataAddress, mint: mint.publicKey, mintAuthority: owner, payer: owner, updateAuthority: owner },
-        { createMetadataAccountArgsV3: {
-          data: { name: tokenName, symbol: tokenSymbol, uri: metadataUri, sellerFeeBasisPoints: 0, creators: null, collection: null, uses: null },
-          isMutable: true,
-          collectionDetails: null
-        } }
-      ));
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
       transaction.feePayer = owner;
@@ -226,8 +198,8 @@ function App() {
       <div className="mx-auto mb-10 max-w-3xl text-center">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-300/[.07] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[.16em] text-violet-200"><span className="pulse-glow h-1.5 w-1.5 rounded-full bg-violet-300" /> SPL token studio</div>
         <h1 className="text-4xl font-extrabold leading-[1.08] tracking-[-.05em] text-white sm:text-6xl">Launch your token.<br /><span className="bg-gradient-to-r from-violet-300 via-fuchsia-200 to-indigo-300 bg-clip-text text-transparent">Make it yours.</span></h1>
-        <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Create an SPL token and attach Metaplex metadata in one wallet-approved transaction. Simple, transparent, on-chain.</p>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-slate-500"><span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-300" /> Non-custodial</span><span className="flex items-center gap-1.5"><Zap size={14} className="text-amber-300" /> Single transaction</span><span className="flex items-center gap-1.5"><Fingerprint size={14} className="text-violet-300" /> Metaplex metadata</span></div>
+        <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Create a classic SPL token without needing a metadata URI. Token artwork is preview-only; wallets and explorers may not display its name, symbol, or image.</p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-slate-500"><span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-300" /> Non-custodial</span><span className="flex items-center gap-1.5"><Zap size={14} className="text-amber-300" /> Single transaction</span><span className="flex items-center gap-1.5"><Fingerprint size={14} className="text-violet-300" /> Metadata optional</span></div>
       </div>
 
       {cluster === "mainnet-beta" && <div className="mx-auto mb-5 max-w-5xl rounded-xl border border-amber-300/20 bg-amber-300/[.06] p-3 text-sm text-amber-100"><Info size={16} className="mr-2 inline" />Mainnet is selected. Real SOL fees and rent will be charged. Test on Devnet first.</div>}
@@ -243,7 +215,7 @@ function App() {
               <FieldLabel hint="PNG, JPG, WebP or GIF · max 2 MB">Token image</FieldLabel>
               <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-violet-300/30 bg-white/[.02] p-4 hover:bg-white/[.04]">
                 {imagePreview ? <img src={imagePreview} alt="Token image preview" className="h-20 w-20 rounded-xl border border-white/10 object-cover" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[.03] text-violet-200"><FileImage size={26} /></span>}
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-100">{imageFile ? imageFile.name : "Choose token image"}</span><span className="mt-1 block text-xs leading-5 text-slate-500">MintSol uploads the image and automatically creates and hosts the metadata for you.</span><span className="mt-2 inline-flex rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Browse image</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-100">{imageFile ? imageFile.name : "Choose token image (optional)"}</span><span className="mt-1 block text-xs leading-5 text-slate-500">Select an image for an on-page preview. It is not uploaded or attached to the on-chain token.</span><span className="mt-2 inline-flex rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Browse image</span></span>
                 <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(e) => {
                   const file = e.target.files?.[0];
                   setError("");
@@ -262,8 +234,7 @@ function App() {
                   reader.readAsDataURL(file);
                 }} />
               </label>
-              <p className="mt-2 text-[11px] leading-5 text-slate-500">No JSON file or manual URI needed. Your image and metadata are hosted on IPFS before the token transaction is prepared.</p>
-              {form.uri && <p className="mt-2 break-all text-[11px] text-emerald-200">Metadata prepared: <a href={form.uri} target="_blank" rel="noreferrer" className="underline">view hosted metadata</a></p>}
+              <p className="mt-2 text-[11px] leading-5 text-amber-200">Image-only mode: no metadata URI is required. The selected image stays in your browser and is not published. Wallets and token explorers may not show a token name, symbol, or image without on-chain metadata and a public metadata URI.</p>
             </div>
             {error && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[.07] p-3 text-sm leading-5 text-rose-200"><Info size={16} className="mr-2 inline" />{error}</div>}
             {stage && <div aria-live="polite" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] p-3 text-sm text-violet-100">{busy && <LoaderCircle size={15} className="mr-2 inline animate-spin" />}{!busy && <CheckCircle2 size={15} className="mr-2 inline" />}{stage}</div>}
@@ -290,7 +261,7 @@ function App() {
           <section className="panel rounded-2xl p-5">
             <div className="mb-4 flex items-center gap-2 text-sm font-bold text-white"><ShieldCheck size={17} className="text-emerald-300" /> What happens on-chain?</div>
             <ol className="space-y-4">
-              {[["01","Create mint account","A new SPL token mint is created."],["02","Mint initial supply","Tokens are sent to your associated account."],["03","Attach metadata","Metaplex stores your name, symbol and URI."],["04","Pay platform fee","0.02 SOL is sent to the configured fee wallet."]].map(([n,title,desc]) => <li key={n} className="flex gap-3"><span className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 text-[10px] text-violet-200">{n}</span><div><p className="text-xs font-semibold text-slate-200">{title}</p><p className="mt-1 text-[11px] leading-4 text-slate-500">{desc}</p></div></li>)}
+              {[["01","Create mint account","A new SPL token mint is created."],["02","Mint initial supply","Tokens are sent to your associated account."],["03","No metadata upload","The image is only a local preview; token metadata is not created."],["04","Pay platform fee","0.02 SOL is sent to the configured fee wallet."]].map(([n,title,desc]) => <li key={n} className="flex gap-3"><span className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 text-[10px] text-violet-200">{n}</span><div><p className="text-xs font-semibold text-slate-200">{title}</p><p className="mt-1 text-[11px] leading-4 text-slate-500">{desc}</p></div></li>)}
             </ol>
           </section>
         </aside>
