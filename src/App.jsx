@@ -124,8 +124,6 @@ function App() {
       setStage("Preparing token transaction");
       const owner = new PublicKey(wallet);
       const feeRecipient = new PublicKey(feeWallet);
-      const tokenName = form.name.trim();
-      const tokenSymbol = form.symbol.trim().toUpperCase();
       const tokenSupply = BigInt(form.supply) * (10n ** BigInt(decimals));
       if (tokenSupply > 18446744073709551615n) throw new Error("Supply multiplied by decimals exceeds the SPL Token uint64 limit.");
 
