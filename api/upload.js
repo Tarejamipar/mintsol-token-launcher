@@ -1,6 +1,7 @@
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const PRODUCTION_ORIGIN = "https://mintsol-token-launcher.vercel.app";
+const PINATA_UPLOAD_URL = "https://uploads.pinata.cloud/v3/files";
 
 function send(res, status, body) {
   res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
@@ -14,6 +15,38 @@ function safeFilename(value, extension) {
 
 function extensionForType(type) {
   return ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" })[type];
+}
+
+function pinataFailureMessage(status, stage) {
+  if (status === 401) return "Pinata rejected the server key (HTTP 401). Replace PINATA_JWT in Vercel with a valid Pinata JWT.";
+  if (status === 403) return "Pinata denied this upload (HTTP 403). Check that the key has permission to upload public files.";
+  if (status === 413) return "Pinata rejected the file as too large. Choose an image under 2 MB.";
+  if (status === 429) return "Pinata rate limit reached. Wait a minute and retry.";
+  if (status >= 500) return "Pinata is temporarily unavailable. Please retry in a moment.";
+  return `Pinata rejected the ${stage} upload (HTTP ${status}). Check the Pinata key permissions and retry.`;
+}
+
+async function uploadPublicFile(jwt, file, filename, contentType) {
+  const form = new FormData();
+  form.append("network", "public");
+  form.append("name", filename);
+  form.append("file", new Blob([file], { type: contentType }), filename);
+
+  const response = await fetch(PINATA_UPLOAD_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}` },
+    body: form
+  });
+  const result = await response.json().catch(() => ({}));
+  const cid = result?.data?.cid;
+  if (!response.ok || typeof cid !== "string" || !cid) {
+    const detail = result?.error || result?.message || result?.data?.message || "No CID returned";
+    console.error("Pinata v3 upload failed:", { status: response.status, detail });
+    const error = new Error(pinataFailureMessage(response.status, "file"));
+    error.status = response.status;
+    throw error;
+  }
+  return cid;
 }
 
 export default async function handler(req, res) {
@@ -58,24 +91,14 @@ export default async function handler(req, res) {
     }
 
     const extension = extensionForType(imageType);
-    const file = new Blob([imageBuffer], { type: imageType });
-    const form = new FormData();
-    form.append("file", file, safeFilename(image.filename, extension));
-    form.append("pinataMetadata", JSON.stringify({ name: `MintSol-${symbol}-image` }));
-    form.append("pinataOptions", JSON.stringify({ cidVersion: 1 }));
-
-    const imageResponse = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${jwt}` },
-      body: form
-    });
-    const imageResult = await imageResponse.json().catch(() => ({}));
-    if (!imageResponse.ok || !imageResult.IpfsHash) {
-      console.error("Pinata image upload failed:", imageResponse.status, imageResult.error || imageResult.message || "Unknown error");
-      return send(res, 502, { error: "Pinata could not upload the image. Check the server-side Pinata key and permissions." });
+    let imageCid;
+    try {
+      imageCid = await uploadPublicFile(jwt, imageBuffer, safeFilename(image.filename, extension), imageType);
+    } catch (error) {
+      return send(res, 502, { error: error?.message || "Pinata could not upload the image. Check the server-side key and permissions." });
     }
 
-    const imageUri = `https://gateway.pinata.cloud/ipfs/${imageResult.IpfsHash}`;
+    const imageUri = `https://gateway.pinata.cloud/ipfs/${imageCid}`;
     const metadata = {
       name,
       symbol,
@@ -88,25 +111,21 @@ export default async function handler(req, res) {
       }
     };
 
-    const metadataResponse = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        pinataMetadata: { name: `MintSol-${symbol}-metadata` },
-        pinataOptions: { cidVersion: 1 },
-        pinataContent: metadata
-      })
-    });
-    const metadataResult = await metadataResponse.json().catch(() => ({}));
-    if (!metadataResponse.ok || !metadataResult.IpfsHash) {
-      console.error("Pinata metadata upload failed:", metadataResponse.status, metadataResult.error || metadataResult.message || "Unknown error");
-      return send(res, 502, { error: "The image was uploaded, but Pinata could not publish token metadata JSON. Retry the upload." });
+    let metadataCid;
+    try {
+      const metadataBytes = Buffer.from(JSON.stringify(metadata), "utf8");
+      metadataCid = await uploadPublicFile(
+        jwt,
+        metadataBytes,
+        safeFilename(`MintSol-${symbol}-metadata`, "json"),
+        "application/json"
+      );
+    } catch (error) {
+      console.error("Pinata metadata upload failed:", error?.message || "Unknown error");
+      return send(res, 502, { error: error?.message || "The image uploaded, but Pinata could not upload public token metadata JSON. Retry." });
     }
 
-    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataResult.IpfsHash}`;
+    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataCid}`;
     return send(res, 200, { imageUri, metadataUri });
   } catch (error) {
     console.error("MintSol upload endpoint failed:", error?.message || "Unknown error");
