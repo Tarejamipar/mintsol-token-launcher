@@ -170,6 +170,27 @@ function App() {
       buildStep = "setting transaction fee payer and blockhash";
       transaction.feePayer = owner;
       transaction.recentBlockhash = blockhash;
+      buildStep = "validating all transaction instruction addresses";
+      transaction.instructions.forEach((instruction, index) => {
+        try {
+          if (!(instruction.programId instanceof PublicKey)) {
+            throw new Error("Instruction program ID is not a PublicKey object.");
+          }
+          instruction.programId.toBuffer();
+          instruction.keys.forEach((account, accountIndex) => {
+            if (!(account.pubkey instanceof PublicKey)) {
+              throw new Error(`Account ${accountIndex} is not a PublicKey object.`);
+            }
+            account.pubkey.toBuffer();
+          });
+        } catch (validationError) {
+          throw new Error(`Invalid address in transaction instruction ${index + 1}: ${validationError?.message || "unknown address error"}`);
+        }
+      });
+
+      buildStep = "compiling the transaction message before signing";
+      transaction.compileMessage();
+
       buildStep = "partially signing the transaction with the newly generated mint key";
       transaction.partialSign(mint);
 
