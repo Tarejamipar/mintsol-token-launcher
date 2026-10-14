@@ -123,23 +123,13 @@ function App() {
     setStage("");
     try {
       setStage("Uploading image and creating metadata");
-      const imageDataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("Could not read the selected image."));
-        reader.readAsDataURL(imageFile);
-      });
-      const imageBase64 = imageDataUrl.includes(",") ? imageDataUrl.slice(imageDataUrl.indexOf(",") + 1) : "";
-      const uploadResponse = await fetch("/api/upload-metadata", {
+      const uploadUrl = new URL("/api/upload-metadata", window.location.origin);
+      uploadUrl.searchParams.set("name", form.name.trim());
+      uploadUrl.searchParams.set("symbol", form.symbol.trim().toUpperCase());
+      const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          symbol: form.symbol.trim().toUpperCase(),
-          description: form.name.trim() + " token created with MintSol.",
-          imageBase64,
-          imageType: imageFile.type
-        })
+        headers: { "Content-Type": imageFile.type },
+        body: imageFile
       });
       const uploadResult = await uploadResponse.json().catch(() => ({}));
       if (!uploadResponse.ok || !uploadResult.metadataUri) {
