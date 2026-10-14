@@ -9,7 +9,7 @@ MintSol is a Vite + React interface for creating a classic SPL token and its Met
 - Connects to a compatible browser wallet such as Phantom.
 - Creates a classic SPL Token mint.
 - Creates the connected wallet's associated token account and mints the initial supply.
-- Creates Metaplex Token Metadata with name, symbol, and an externally hosted JSON URI.
+- Lets users select a token image; the server securely uploads it to Pinata IPFS and automatically creates and hosts the metadata JSON.
 - Adds a configurable **0.02 SOL platform fee** transfer to the same transaction.
 - Shows the mint address and Solana Explorer links after confirmation.
 - Includes a GitHub Actions production-build check.
@@ -24,7 +24,7 @@ Automated unit tests cover token form validation, accepted metadata URI protocol
 - A compatible Solana browser wallet.
 - Devnet SOL for testing, obtained from a trusted Solana Devnet faucet.
 - A public Solana address to receive the platform fee.
-- A metadata JSON file and image hosted at a reachable HTTP(S) or IPFS URI.
+- A Pinata account and server-side `PINATA_JWT` environment variable for image and metadata hosting.
 
 ## Run locally
 
@@ -35,16 +35,25 @@ Automated unit tests cover token form validation, accepted metadata URI protocol
    - macOS/Linux: **cp .env.example .env**
 4. Edit .env and set VITE_PLATFORM_FEE_WALLET to the public address that should receive the 0.02 SOL fee. Do not put private keys or seed phrases in this file.
 5. Keep VITE_SOLANA_CLUSTER=devnet while testing.
-6. Start the development server with **npm run dev**.
-7. Open the local URL printed by Vite, connect your wallet, and create a test token.
+6. For the full app including the serverless image-upload API, configure the project with Vercel and run **npx vercel dev**. A plain **npm run dev** starts Vite only and does not run the `/api` function.
+7. In Vercel Project Settings → Environment Variables, add **PINATA_JWT** with a Pinata JWT. Keep it server-side: never prefix it with `VITE_`, commit it, or expose it in frontend code.
+8. Keep `VITE_SOLANA_CLUSTER=devnet`, open the local URL printed by Vercel, connect your test wallet, and create a test token.
 
 Run automated unit tests with **npm test**. Build and preview the production bundle with **npm run build** and **npm run preview**.
 
-## Metadata JSON example
+## Image upload and automatic metadata
 
-The examples/token-metadata.json file shows the shape of a metadata document. Host your own JSON document and image somewhere publicly reachable, then enter the JSON URI into the app.
+The token form accepts a PNG, JPEG, WebP, or GIF image up to 2 MB. Users do not need to prepare a JSON file or paste a metadata URI. Before the token transaction is built, the app sends the image and token name/symbol to the serverless `/api/upload-metadata` function. The function uses the server-only `PINATA_JWT` secret to upload the image and generated metadata JSON to Pinata IPFS, then returns the public metadata URI to the app.
 
-The application records the URI on-chain; it does **not** upload your JSON or image to IPFS, Arweave, or another storage provider. Verify the URI and image before minting because metadata availability depends on your host.
+### Configure image hosting on Vercel
+
+1. Create or sign in to a Pinata account and create an API key/JWT with permission to upload/pin files and JSON.
+2. In Vercel, open the MintSol project → **Settings → Environment Variables**.
+3. Add `PINATA_JWT` and paste the JWT as its value. Select the Production environment (and Preview if needed).
+4. Save the variable and redeploy the project so the serverless function can read it.
+5. Open the live site, choose an image, and confirm the upload completes before approving any wallet transaction.
+
+**Security:** Do not name this variable `VITE_PINATA_JWT`, do not put it in source code, and never commit it to GitHub. The upload endpoint validates the token fields, accepted image types, and 2 MB size limit. Keep testing on Devnet and review every Phantom transaction. Uploading may store files in your Pinata account even if the later token transaction is cancelled.
 
 ## Transaction behavior
 
@@ -84,7 +93,8 @@ Vite environment variables are embedded in the public client bundle. Only use pu
 - **Wallet not found:** Install or enable a compatible Solana browser wallet and reload the page.
 - **Insufficient funds:** Request Devnet SOL when on Devnet, or fund the wallet with enough SOL for fee, rent, and transaction fees on Mainnet.
 - **Fee wallet setup required:** Set a valid public address in .env, then restart Vite.
-- **Metadata does not display:** Verify the JSON URI, image URI, accessibility, and JSON fields.
+- **Image upload is not configured:** Add the server-side `PINATA_JWT` environment variable in Vercel and redeploy.
+- **Metadata does not display:** Open the returned metadata URI and verify its JSON and image URI are publicly reachable.
 - **Transaction fails:** Check the selected cluster, wallet network, balance, and transaction error details.
 
 ## License
