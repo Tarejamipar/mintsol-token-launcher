@@ -35,7 +35,7 @@ Automated unit tests cover token form validation, accepted metadata URI protocol
    - macOS/Linux: **cp .env.example .env**
 4. Edit .env and set VITE_PLATFORM_FEE_WALLET to the public address that should receive the 0.02 SOL fee. Do not put private keys or seed phrases in this file.
 5. Keep VITE_SOLANA_CLUSTER=devnet while testing.
-6. Keep `VITE_SOLANA_CLUSTER=devnet`, open the local Vite URL, connect your test wallet, and create a test token.
+6. Keep `VITE_SOLANA_CLUSTER=devnet`. The upload endpoint is a Vercel serverless function, so plain `npm run dev` does not serve it. For local end-to-end testing, use the Vercel CLI (`vercel dev`) with the server-side `PINATA_JWT` available in your local environment; otherwise test on your deployed Vercel app.
 
 Run automated unit tests with **npm test**. Build and preview the production bundle with **npm run build** and **npm run preview**.
 
@@ -73,7 +73,7 @@ The app uses the connected wallet as mint authority and metadata update authorit
 | Variable | Purpose |
 | --- | --- |
 | VITE_PLATFORM_FEE_WALLET | Public Solana address receiving the 0.02 SOL fee. Required for token creation. |
-| VITE_SOLANA_CLUSTER | Devnet by default; set to mainnet-beta only when deliberately preparing for mainnet. |
+| VITE_SOLANA_CLUSTER | Devnet by default; set to mainnet-beta only when deliberately preparing for mainnet. |\n| PINATA_JWT | Server-only Pinata credential used by `/api/upload`. Never prefix it with `VITE_` or commit its value. |\n| APP_ORIGIN | Optional exact app origin allowed to call `/api/upload`; defaults to the production Vercel URL. |
 
 Vite environment variables are embedded in the public client bundle. Only use public configuration values here. Never add a private key, seed phrase, or secret API key.
 
