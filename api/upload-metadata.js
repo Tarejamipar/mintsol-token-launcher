@@ -22,15 +22,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    let raw = "";
-    for await (const chunk of req) {
-      raw += chunk;
-      if (raw.length > MAX_IMAGE_BYTES * 1.5) {
-        return send(res, 413, { error: "Image is too large. Choose an image under 2 MB." });
+    let body;
+    if (req.body && typeof req.body === "object") {
+      // Vercel may parse JSON request bodies before invoking the handler.
+      body = req.body;
+    } else {
+      let raw = typeof req.body === "string" ? req.body : "";
+      if (!raw) {
+        for await (const chunk of req) {
+          raw += chunk;
+          if (raw.length > MAX_IMAGE_BYTES * 1.5) {
+            return send(res, 413, { error: "Image is too large. Choose an image under 2 MB." });
+          }
+        }
       }
+      body = JSON.parse(raw || "{}");
     }
-
-    const body = JSON.parse(raw || "{}");
     const { name, symbol, description = "", imageBase64, imageType } = body;
     if (typeof name !== "string" || !name.trim() || name.trim().length > 32) {
       return send(res, 400, { error: "Enter a token name of 1–32 characters." });
