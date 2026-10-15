@@ -1,11 +1,14 @@
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+import { ALLOWED_TYPES, checkUploadRateLimit, decodeImageBase64 } from "./upload-security.js";
+
 const PRODUCTION_ORIGIN = "https://mintsol-token-launcher.vercel.app";
 const PINATA_UPLOAD_URL = "https://uploads.pinata.cloud/v3/files";
 
-function send(res, status, body) {
-  res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(body));
+function send(res, status, body, headers = {}) {
+  res.status(status);
+  for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  return res.end(JSON.stringify(body));
 }
 
 function safeFilename(value, extension) {
@@ -15,6 +18,14 @@ function safeFilename(value, extension) {
 
 function extensionForType(type) {
   return ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" })[type];
+}
+
+function clientIp(req) {
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) return realIp.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  return "unknown";
 }
 
 function pinataFailureMessage(status, stage) {
@@ -51,17 +62,12 @@ async function uploadPublicFile(jwt, file, filename, contentType) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return send(res, 405, { error: "Method not allowed." });
+    return send(res, 405, { error: "Method not allowed." }, { Allow: "POST" });
   }
 
   const origin = req.headers.origin;
-  // Allow explicit exact origins, and the exact host serving this same-origin
-  // API request (covers Vercel aliases/custom domains without wildcard CORS).
   const configuredOrigins = (process.env.APP_ORIGIN || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+    .split(",").map((value) => value.trim()).filter(Boolean);
   const allowedOrigins = new Set([
     PRODUCTION_ORIGIN,
     ...configuredOrigins,
@@ -71,7 +77,9 @@ export default async function handler(req, res) {
   let sameRequestHost = false;
   if (origin && req.headers.host) {
     try {
-      sameRequestHost = new URL(origin).host.toLowerCase() === String(req.headers.host).toLowerCase();
+      const parsedOrigin = new URL(origin);
+      sameRequestHost = ["https:", "http:"].includes(parsedOrigin.protocol)
+        && parsedOrigin.host.toLowerCase() === String(req.headers.host).toLowerCase();
     } catch {
       sameRequestHost = false;
     }
@@ -80,15 +88,24 @@ export default async function handler(req, res) {
     return send(res, 403, { error: "Origin not allowed." });
   }
 
+  const limit = checkUploadRateLimit(clientIp(req));
+  if (!limit.allowed) {
+    return send(res, 429, { error: "Upload rate limit reached. Wait 15 minutes before trying again." }, {
+      "Retry-After": String(limit.retryAfterSeconds),
+      "X-RateLimit-Limit": "10",
+      "X-RateLimit-Remaining": "0"
+    });
+  }
+
   const jwt = process.env.PINATA_JWT;
-  if (!jwt) return send(res, 500, { error: "Server upload is not configured. Set PINATA_JWT in Vercel Environment Variables." });
+  if (!jwt) return send(res, 503, { error: "Server upload is not configured. Set PINATA_JWT in Vercel Environment Variables." });
 
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const symbol = typeof body.symbol === "string" ? body.symbol.trim() : "";
     const image = body.image && typeof body.image === "object" ? body.image : {};
-    const imageType = typeof image.contentType === "string" ? image.contentType : "";
+    const imageType = typeof image.contentType === "string" ? image.contentType.toLowerCase() : "";
     const base64 = typeof image.base64 === "string" ? image.base64 : "";
 
     if (!name || new TextEncoder().encode(name).length > 32) {
@@ -100,52 +117,42 @@ export default async function handler(req, res) {
     if (!ALLOWED_TYPES.has(imageType)) {
       return send(res, 400, { error: "Choose a PNG, JPEG, WebP, or GIF image." });
     }
-    if (!base64 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
-      return send(res, 400, { error: "The image upload data is invalid." });
-    }
 
-    const imageBuffer = Buffer.from(base64, "base64");
-    if (!imageBuffer.length || imageBuffer.length > MAX_IMAGE_BYTES) {
-      return send(res, 413, { error: "Image must be larger than 0 bytes and no more than 2 MB." });
-    }
+    // Reject oversized encoded payloads before allocating/decoding the image buffer.
+    const decoded = decodeImageBase64(base64, imageType);
+    if (decoded.error) return send(res, decoded.status, { error: decoded.error });
+    const imageBuffer = decoded.imageBuffer;
 
-    const extension = extensionForType(imageType);
     let imageCid;
     try {
-      imageCid = await uploadPublicFile(jwt, imageBuffer, safeFilename(image.filename, extension), imageType);
+      imageCid = await uploadPublicFile(jwt, imageBuffer, safeFilename(image.filename, extensionForType(imageType)), imageType);
     } catch (error) {
       return send(res, 502, { error: error?.message || "Pinata could not upload the image. Check the server-side key and permissions." });
     }
 
     const imageUri = `https://gateway.pinata.cloud/ipfs/${imageCid}`;
     const metadata = {
-      name,
-      symbol,
+      name, symbol: symbol.toUpperCase(),
       description: `${name} token created with MintSol.`,
-      image: imageUri,
-      attributes: [],
-      properties: {
-        files: [{ uri: imageUri, type: imageType }],
-        category: "image"
-      }
+      image: imageUri, attributes: [],
+      properties: { files: [{ uri: imageUri, type: imageType }], category: "image" }
     };
 
     let metadataCid;
     try {
-      const metadataBytes = Buffer.from(JSON.stringify(metadata), "utf8");
       metadataCid = await uploadPublicFile(
-        jwt,
-        metadataBytes,
-        safeFilename(`MintSol-${symbol}-metadata`, "json"),
-        "application/json"
+        jwt, Buffer.from(JSON.stringify(metadata), "utf8"),
+        safeFilename(`MintSol-${symbol}-metadata`, "json"), "application/json"
       );
     } catch (error) {
       console.error("Pinata metadata upload failed:", error?.message || "Unknown error");
       return send(res, 502, { error: error?.message || "The image uploaded, but Pinata could not upload public token metadata JSON. Retry." });
     }
 
-    const metadataUri = `https://gateway.pinata.cloud/ipfs/${metadataCid}`;
-    return send(res, 200, { imageUri, metadataUri });
+    return send(res, 200, {
+      imageUri,
+      metadataUri: `https://gateway.pinata.cloud/ipfs/${metadataCid}`
+    }, { "X-RateLimit-Limit": "10", "X-RateLimit-Remaining": String(limit.remaining) });
   } catch (error) {
     console.error("MintSol upload endpoint failed:", error?.message || "Unknown error");
     return send(res, 500, { error: "The upload failed unexpectedly. Please try again." });
