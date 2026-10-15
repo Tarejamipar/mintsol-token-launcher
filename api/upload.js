@@ -56,8 +56,8 @@ export default async function handler(req, res) {
   }
 
   const origin = req.headers.origin;
-  // Always allow the canonical production domain. APP_ORIGIN may contain
-  // additional exact origins separated by commas (for example, a Preview URL).
+  // Allow explicit exact origins, and the exact host serving this same-origin
+  // API request (covers Vercel aliases/custom domains without wildcard CORS).
   const configuredOrigins = (process.env.APP_ORIGIN || "")
     .split(",")
     .map((value) => value.trim())
@@ -68,7 +68,15 @@ export default async function handler(req, res) {
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_BRANCH_URL ? [`https://${process.env.VERCEL_BRANCH_URL}`] : [])
   ]);
-  if (!origin || !allowedOrigins.has(origin)) {
+  let sameRequestHost = false;
+  if (origin && req.headers.host) {
+    try {
+      sameRequestHost = new URL(origin).host.toLowerCase() === String(req.headers.host).toLowerCase();
+    } catch {
+      sameRequestHost = false;
+    }
+  }
+  if (!origin || (!allowedOrigins.has(origin) && !sameRequestHost)) {
     return send(res, 403, { error: "Origin not allowed." });
   }
 
