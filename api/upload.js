@@ -56,8 +56,19 @@ export default async function handler(req, res) {
   }
 
   const origin = req.headers.origin;
-  const allowedOrigin = process.env.APP_ORIGIN || PRODUCTION_ORIGIN;
-  if (origin !== allowedOrigin) {
+  // Always allow the canonical production domain. APP_ORIGIN may contain
+  // additional exact origins separated by commas (for example, a Preview URL).
+  const configuredOrigins = (process.env.APP_ORIGIN || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const allowedOrigins = new Set([
+    PRODUCTION_ORIGIN,
+    ...configuredOrigins,
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    ...(process.env.VERCEL_BRANCH_URL ? [`https://${process.env.VERCEL_BRANCH_URL}`] : [])
+  ]);
+  if (!origin || !allowedOrigins.has(origin)) {
     return send(res, 403, { error: "Origin not allowed." });
   }
 
