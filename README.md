@@ -9,13 +9,16 @@ MintSol is a Vite + React interface for creating a classic SPL token and its Met
 - Connects to a compatible browser wallet such as Phantom.
 - Creates a classic SPL Token mint.
 - Creates the connected wallet's associated token account and mints the initial supply.
+- Initializes new tokens without a freeze authority and permanently revokes mint authority after minting the initial supply. This makes the initial supply fixed; revocation cannot be undone.
 - Uploads a selected token image and metadata JSON to Pinata/IPFS through a server-side Vercel function.
 - Creates a Metaplex Token Metadata account with the token name, symbol, and public metadata URI in the same wallet-approved Solana transaction.
 - Adds a configurable **0.02 SOL platform fee** transfer to the same transaction.
 - Shows the mint address and Solana Explorer links after confirmation.
-- Includes GitHub Actions checks.
+- Includes a GitHub Actions production-build check.
 
 The app does not custody wallet keys. The wallet signs the transaction locally.
+
+Automated unit tests cover token form validation, accepted metadata URI protocols, and wallet-address display formatting. These tests do not replace an end-to-end wallet or on-chain test.
 
 ## Requirements
 
@@ -27,72 +30,85 @@ The app does not custody wallet keys. The wallet signs the transaction locally.
 ## Run locally
 
 1. Clone the repository and enter its directory.
-2. Install the locked dependency versions with `npm ci`.
+2. Install the exact locked dependency versions by running **npm ci**.
 3. Copy `.env.example` to `.env`.
-   - Windows PowerShell: `Copy-Item .env.example .env`
-   - macOS/Linux: `cp .env.example .env`
-4. Set `VITE_PLATFORM_FEE_WALLET` to the public address that should receive the 0.02 SOL fee. Do not put private keys or seed phrases in this file.
+   - Windows PowerShell: **Copy-Item .env.example .env**
+   - macOS/Linux: **cp .env.example .env**
+4. Edit `.env` and set `VITE_PLATFORM_FEE_WALLET` to the public address that should receive the 0.02 SOL fee. Do not put private keys or seed phrases in this file.
 5. Keep `VITE_SOLANA_CLUSTER=devnet` while testing.
-6. The upload endpoint is a Vercel serverless function, so plain `npm run dev` does not serve it. For local end-to-end testing, use `vercel dev` with the server-side `PINATA_JWT` available in your local environment, or test on your deployed Vercel app.
+6. The upload endpoint is a Vercel serverless function, so plain `npm run dev` does not serve it. For local end-to-end testing, use the Vercel CLI (`vercel dev`) with the server-side `PINATA_JWT` available in your local environment; otherwise test on your deployed Vercel app.
 
-Run tests with `npm test`; build with `npm run build`; preview the production bundle with `npm run preview`.
+Run automated unit tests with **npm test**. Build and preview the production bundle with **npm run build** and **npm run preview**.
 
 ## Token image and on-chain metadata
 
-PNG, JPEG, WebP, or GIF images up to 2 MiB are accepted. The server-side endpoint uploads the image and metadata JSON to Pinata/IPFS and returns public URLs. Compatible wallets and explorers may resolve the token name, symbol, and image from the on-chain metadata, but indexing and caching delays vary.
+A PNG, JPEG, WebP, or GIF image up to 2 MiB is accepted for the metadata publishing flow. The Vercel server-side endpoint uploads the image and a metadata JSON document to Pinata/IPFS, then returns public URLs. The client adds a Metaplex Token Metadata instruction containing the token name, symbol, and metadata URI to the same wallet-approved transaction that creates the classic SPL token.
+
+Compatible wallets and explorers can use this on-chain metadata to resolve the token name, symbol, and image. Display is not guaranteed to be immediate: wallet and explorer indexing/caching varies, and some services only show assets after their own indexing.
 
 ### Required Vercel configuration
 
-- Set `PINATA_JWT` under Vercel Project → Settings → Environment Variables. It must be server-only and must never use the `VITE_` prefix.
-- The upload endpoint allows `https://mintsol-token-launcher.vercel.app` by default. Set `APP_ORIGIN` to your exact production origin if it differs.
+- Set `PINATA_JWT` under Vercel Project → Settings → Environment Variables. It must be a server-only variable and must never use the `VITE_` prefix.
+- The upload endpoint allows the production origin `https://mintsol-token-launcher.vercel.app` by default. If your deployment uses a different domain, set `APP_ORIGIN` to that exact origin in Vercel.
 - Redeploy after adding or changing environment variables.
-- The endpoint checks request origin, validates image MIME types against file signatures, and limits decoded images to 2 MiB.
-- The rate limit is best-effort and in-memory: 10 requests per IP per 15-minute window per serverless instance. It is not a global distributed limit. Configure Vercel Firewall/rate limiting or a shared rate-limit service before high-volume public use.
+- The upload endpoint checks request origin, accepted image types, image signatures, and a 2 MiB decoded file limit. It applies a best-effort in-memory rate limit per serverless instance; this is not a global distributed limit. Add Vercel-side rate limiting/abuse protection before promoting this endpoint for high-volume public use.
 
-The Pinata JWT is never sent to the browser. Uploaded IPFS files may remain pinned if the user rejects the wallet transaction or the Solana transaction fails.
+The Pinata JWT is never sent to the browser. Uploaded IPFS files may remain pinned even if the user rejects the wallet transaction or the Solana transaction fails.
 
 ## Transaction behavior
 
-The transaction transfers the 0.02 SOL platform fee, creates and initializes the mint, creates the associated token account, mints the initial supply, and creates the Metaplex metadata account. Review the transaction code and current authority behavior before relying on a fixed-supply claim or using Mainnet. All instructions are submitted together; if one fails, state changes do not partially commit, though network fees may still be charged. Rent and network fees are additional to the platform fee.
+The transaction includes:
+
+1. Transfer of 0.02 SOL to `VITE_PLATFORM_FEE_WALLET`.
+2. Creation and initialization of the mint account.
+3. Creation of the associated token account.
+4. Minting of the initial supply to the connected wallet.
+5. Creation of a Metaplex metadata account pointing to the public IPFS metadata JSON.
+6. Revocation of mint authority after the initial supply is minted.
+
+These instructions are submitted together. If any instruction fails, Solana transaction atomicity means the instructions do not partially commit, although transaction fees may still be charged. The payer also needs SOL for account rent and network fees. The exact cost varies.
+
+The app uses the connected wallet as metadata update authority. The mint has no freeze authority, and the mint authority is permanently revoked within the creation transaction. These authority changes are irreversible; verify all transaction details before signing.
 
 ## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_PLATFORM_FEE_WALLET` | Public Solana address receiving the 0.02 SOL fee. |
-| `VITE_SOLANA_CLUSTER` | Devnet by default. Keep on Devnet while testing. |
-| `PINATA_JWT` | Server-only Pinata credential used by `/api/upload`. Never prefix it with `VITE_` or commit it. |
-| `APP_ORIGIN` | Optional exact origin allowed to call `/api/upload`; defaults to the production Vercel URL. |
+| `VITE_PLATFORM_FEE_WALLET` | Public Solana address receiving the 0.02 SOL fee. Required for token creation. |
+| `VITE_SOLANA_CLUSTER` | Devnet by default; do not switch to `mainnet-beta` until the mainnet checklist is complete. |
+| `PINATA_JWT` | Server-only Pinata credential used by `/api/upload`. Never prefix it with `VITE_` or commit its value. |
+| `APP_ORIGIN` | Optional exact app origin allowed to call `/api/upload`; defaults to the production Vercel URL. |
 
-Vite environment variables are embedded in the public client bundle. Never add a private key, seed phrase, or secret API key to client-side variables.
+Vite environment variables are embedded in the public client bundle. Only use public configuration values here. Never add a private key, seed phrase, or secret API key.
 
 ## Mainnet checklist
 
-- Complete the entire creation flow on Devnet first.
-- Inspect every wallet instruction and verify the fee recipient address.
-- Verify the mint and freeze authority state of a test token and clearly document the behavior.
-- Review source code and dependency versions; run tests and a security/dependency audit.
-- Confirm metadata JSON and image URLs are public and durable.
-- Understand rent, network fees, decimals, mint authority, and metadata update authority.
-- Use an RPC provider suitable for expected traffic.
-- Do not claim the app is audited or production-ready without an independent review.
+- Complete and verify the full creation flow on Devnet first.
+- Inspect every wallet instruction and confirm the fee recipient address.
+- Verify that mint authority is revoked and freeze authority is absent on a test mint.
+- Review the source code and dependency versions; run a security/dependency audit.
+- Confirm metadata JSON and image URLs are durable and accessible.
+- Understand rent, network fees, token decimals, mint authority, and metadata update authority.
+- Use an RPC provider suitable for your traffic and operational requirements.
+- Configure platform fee recipient and server-only Pinata credentials correctly.
+- Do not promise the app is audited or production-ready without an independent review.
 
 ## Troubleshooting
 
-- **Wallet not found:** Install or enable a compatible Solana browser wallet and reload.
-- **Insufficient funds:** Request Devnet SOL on Devnet; on Mainnet, budget for the platform fee, rent, and transaction fees.
-- **Fee wallet setup required:** Set a valid public address in `.env` and restart Vite.
-- **Image upload fails:** Verify the server-side `PINATA_JWT` Vercel environment variable and redeploy. Never paste the JWT into chat or commit it.
-- **Metadata missing in wallet/explorer:** Confirm the metadata account exists and its URI is publicly accessible. Indexing and caching can delay display.
-- **Transaction fails:** Check cluster selection, wallet network, balance, and the transaction error.
+- **Wallet not found:** Install or enable a compatible Solana browser wallet and reload the page.
+- **Insufficient funds:** Request Devnet SOL when on Devnet, or fund the wallet with enough SOL for fee, rent, and transaction fees on Mainnet.
+- **Fee wallet setup required:** Set a valid public address in `.env`, then restart Vite.
+- **Image upload fails:** Confirm `PINATA_JWT` is configured as a server-only Vercel environment variable and redeploy after changing it. Never share the JWT in chat or commit it.
+- **Token name, symbol, or image is missing in a wallet/explorer:** Confirm the Metaplex metadata account exists and its URI opens publicly. Wallet/explorer indexing and caching may delay display.
+- **Transaction fails:** Check the selected cluster, wallet network, balance, and transaction error details.
 
-## Security hardening notes
+## Upload security hardening
 
 - `/api/upload` accepts POST requests only and validates the request origin and uploaded image signature.
 - Encoded image data is size-checked before Base64 decoding; decoded images are limited to 2 MiB.
-- The best-effort in-memory limit allows 10 upload requests per IP per 15-minute window per serverless instance; it is not global.
-- The legacy `/api/upload-metadata` route was removed after checking that the app uses `/api/upload` only.
-- Keep Pinata credentials server-side. Uploaded IPFS files can remain pinned even when a wallet transaction is rejected.
+- The endpoint applies a best-effort limit of 10 upload requests per IP per 15-minute window **per serverless instance** and returns rate-limit headers. This is not a global distributed limit; use Vercel Firewall/rate limiting or a shared rate-limit service before high-volume public use.
+- The legacy `/api/upload-metadata` route was removed after confirming the app uses `/api/upload`.
+- Automated tests cover image validation, encoded/decoded size limits, and rate limiting.
 
 Run verification with:
 
