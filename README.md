@@ -51,7 +51,7 @@ Compatible wallets and explorers can use this on-chain metadata to resolve the t
 - Set `PINATA_JWT` under Vercel Project → Settings → Environment Variables. It must be a server-only variable and must never use the `VITE_` prefix.
 - The upload endpoint allows the production origin `https://mintsol-token-launcher.vercel.app` by default. If your deployment uses a different domain, set `APP_ORIGIN` to that exact origin in Vercel.
 - Redeploy after adding or changing environment variables.
-- The upload endpoint checks request origin, accepted image types, image signatures, and a 2 MiB decoded file limit. It applies a best-effort in-memory rate limit per serverless instance; this is not a global distributed limit. Add Vercel-side rate limiting/abuse protection before promoting this endpoint for high-volume public use.
+- The upload endpoint checks request origin, accepted image types, image signatures, and a 2 MiB decoded file limit. It uses a shared Upstash Redis rate limit when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are configured; otherwise it falls back to best-effort per-instance limiting. Configure both shared-limit variables in Vercel to enforce the 10-request/15-minute limit across serverless instances.
 
 The Pinata JWT is never sent to the browser. Uploaded IPFS files may remain pinned even if the user rejects the wallet transaction or the Solana transaction fails.
 
@@ -77,7 +77,7 @@ The app uses the connected wallet as metadata update authority. The mint has no 
 | `VITE_PLATFORM_FEE_WALLET` | Public Solana address receiving the 0.02 SOL fee. Required for token creation. |
 | `VITE_SOLANA_CLUSTER` | Devnet by default; do not switch to `mainnet-beta` until the mainnet checklist is complete. |
 | `PINATA_JWT` | Server-only Pinata credential used by `/api/upload`. Never prefix it with `VITE_` or commit its value. |
-| `APP_ORIGIN` | Optional exact app origin allowed to call `/api/upload`; defaults to the production Vercel URL. |
+| `APP_ORIGIN` | Optional exact app origin allowed to call `/api/upload`; defaults to the production Vercel URL. |\n| `UPSTASH_REDIS_REST_URL` | Optional Upstash Redis REST URL for cross-instance upload rate limiting. |\n| `UPSTASH_REDIS_REST_TOKEN` | Optional server-only Upstash Redis REST token; never prefix it with `VITE_` or commit its value. |
 
 Vite environment variables are embedded in the public client bundle. Only use public configuration values here. Never add a private key, seed phrase, or secret API key.
 
