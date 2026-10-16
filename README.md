@@ -102,6 +102,22 @@ Vite environment variables are embedded in the public client bundle. Only use pu
 - **Token name, symbol, or image is missing in a wallet/explorer:** Confirm the Metaplex metadata account exists and its URI opens publicly. Wallet/explorer indexing and caching may delay display.
 - **Transaction fails:** Check the selected cluster, wallet network, balance, and transaction error details.
 
+## Upload security hardening
+
+- `/api/upload` accepts POST requests only and validates the request origin and uploaded image signature.
+- Encoded image data is size-checked before Base64 decoding; decoded images are limited to 2 MiB.
+- The endpoint applies a best-effort limit of 10 upload requests per IP per 15-minute window **per serverless instance** and returns rate-limit headers. This is not a global distributed limit; use Vercel Firewall/rate limiting or a shared rate-limit service before high-volume public use.
+- The legacy `/api/upload-metadata` route was removed after confirming the app uses `/api/upload`.
+- Automated tests cover image validation, encoded/decoded size limits, and rate limiting.
+
+Run verification with:
+
+```sh
+npm ci
+npm test
+npm run build
+```
+
 ## License
 
 MIT. See LICENSE.
