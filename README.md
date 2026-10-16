@@ -9,6 +9,7 @@ MintSol is a Vite + React interface for creating a classic SPL token and its Met
 - Connects to a compatible browser wallet such as Phantom.
 - Creates a classic SPL Token mint.
 - Creates the connected wallet's associated token account and mints the initial supply.
+- Initializes new tokens without a freeze authority and permanently revokes mint authority after minting the initial supply. This makes the initial supply fixed; revocation cannot be undone.
 - Uploads a selected token image and metadata JSON to Pinata/IPFS through a server-side Vercel function.\n- Creates a Metaplex Token Metadata account with the token name, symbol, and public metadata URI in the same wallet-approved Solana transaction.
 - Adds a configurable **0.02 SOL platform fee** transfer to the same transaction.
 - Shows the mint address and Solana Explorer links after confirmation.
