@@ -74,7 +74,7 @@ export async function checkSharedUploadRateLimit(ip, options = {}) {
   const keyIp = String(ip || "unknown").slice(0, 128);
   const key = `mintsol:upload-rate:${Buffer.from(keyIp).toString("base64url")}`;
   const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(url.replace(/\\/$/, ""), {
+  const response = await fetchImpl(url.replace(/\/$/, ""), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(["EVAL", SHARED_LIMIT_SCRIPT, "1", key, String(RATE_LIMIT_WINDOW_MS)])
