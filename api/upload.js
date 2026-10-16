@@ -1,4 +1,4 @@
-import { ALLOWED_TYPES, checkUploadRateLimit, decodeImageBase64 } from "./upload-security.js";
+import { ALLOWED_TYPES, checkSharedUploadRateLimit, checkUploadRateLimit, decodeImageBase64 } from "./upload-security.js";
 
 const PRODUCTION_ORIGIN = "https://mintsol-token-launcher.vercel.app";
 const PINATA_UPLOAD_URL = "https://uploads.pinata.cloud/v3/files";
@@ -88,7 +88,14 @@ export default async function handler(req, res) {
     return send(res, 403, { error: "Origin not allowed." });
   }
 
-  const limit = checkUploadRateLimit(clientIp(req));
+  let limit;
+  try {
+    const sharedLimit = await checkSharedUploadRateLimit(clientIp(req));
+    limit = sharedLimit ?? checkUploadRateLimit(clientIp(req));
+  } catch (error) {
+    console.error("Shared upload rate limiter unavailable:", error?.message || "Unknown error");
+    return send(res, 503, { error: "Upload protection is temporarily unavailable. Please retry shortly." });
+  }
   if (!limit.allowed) {
     return send(res, 429, { error: "Upload rate limit reached. Wait 15 minutes before trying again." }, {
       "Retry-After": String(limit.retryAfterSeconds),
