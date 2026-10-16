@@ -8,9 +8,9 @@ import {
   clusterApiUrl, Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL
 } from "@solana/web3.js";
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID, MINT_SIZE, TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID, AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction, createInitializeMintInstruction,
-  createMintToInstruction, getAssociatedTokenAddressSync
+  createMintToInstruction, createSetAuthorityInstruction, getAssociatedTokenAddressSync
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
 import { Buffer } from "buffer";
@@ -176,7 +176,8 @@ function App() {
         lamports: rentLamports, programId: TOKEN_PROGRAM_ID
       }));
       buildStep = "adding the initialize-mint instruction";
-      transaction.add(createInitializeMintInstruction(mint.publicKey, decimals, owner, owner, TOKEN_PROGRAM_ID));
+      // Fixed-supply policy: initialize without a freeze authority.
+      transaction.add(createInitializeMintInstruction(mint.publicKey, decimals, owner, null, TOKEN_PROGRAM_ID));
       buildStep = "adding the associated-token-account instruction";
       transaction.add(createAssociatedTokenAccountInstruction(owner, associatedToken, owner, mint.publicKey, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
       buildStep = "adding the mint-to instruction";
@@ -212,7 +213,19 @@ function App() {
         }
       ));
 
-      buildStep = "requesting a recent blockhash from Solana Devnet";
+      // Revoke mint authority only after the initial supply has been minted.
+      // This is permanent: no further tokens can be minted through this authority.
+      buildStep = "adding permanent mint-authority revocation";
+      transaction.add(createSetAuthorityInstruction(
+        mint.publicKey,
+        owner,
+        AuthorityType.MintTokens,
+        null,
+        [],
+        TOKEN_PROGRAM_ID
+      ));
+
+      buildStep = `requesting a recent blockhash from Solana ${cluster === "devnet" ? "Devnet" : "Mainnet"}`;
       const latestBlockhash = await connection.getLatestBlockhash("confirmed");
       const { blockhash, lastValidBlockHeight } = latestBlockhash || {};
       if (typeof blockhash !== "string" || !blockhash) {
