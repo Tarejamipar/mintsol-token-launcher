@@ -46,6 +46,7 @@ function App() {
   const [copied, setCopied] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [form, setForm] = useState({ name: "", symbol: "", supply: "1000000", decimals: "9", uri: "" });
 
   useEffect(() => {
@@ -55,11 +56,13 @@ function App() {
     const handleAccountChanged = (publicKey) => {
       const nextWallet = publicKey ? new PublicKey(publicKey.toString()).toBase58() : "";
       if (nextWallet !== wallet) {
+        setSafetyAcknowledged(false);
         setWallet(nextWallet);
         setError("Your wallet account changed. Review the connected account before continuing.");
       }
     };
     const handleDisconnect = () => {
+      setSafetyAcknowledged(false);
       setWallet("");
       setError("Your wallet disconnected. Reconnect it before creating a token.");
     };
@@ -79,13 +82,23 @@ function App() {
     catch { return false; }
   }, [feeWallet]);
 
-  const update = (key, value) => setForm((current) => ({ ...current, [key]: value, ...(["name", "symbol"].includes(key) ? { uri: "" } : {}) }));
+  const update = (key, value) => {
+    setSafetyAcknowledged(false);
+    setForm((current) => ({ ...current, [key]: value, ...(["name", "symbol"].includes(key) ? { uri: "" } : {}) }));
+  };
   const decimals = Number(form.decimals);
   const supply = Number(form.supply);
   const validSupply = Number.isSafeInteger(supply) && supply > 0;
   const validDecimals = Number.isInteger(decimals) && decimals >= 0 && decimals <= 9;
   const validForm = validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" });
-  const canCreate = Boolean(wallet) && feeWalletValid && validForm && !busy;
+  const canCreate = Boolean(wallet) && feeWalletValid && validForm && Boolean(imageFile) && safetyAcknowledged && !busy;
+  const safetyChecks = [
+    { label: "Network identified", detail: cluster === "devnet" ? "Solana Devnet selected for testing." : "Solana Mainnet selected; real SOL will be spent.", passed: true, warning: cluster === "mainnet-beta" },
+    { label: "Wallet connected", detail: wallet ? `Connected wallet: ${shortKey(wallet)}` : "Connect a wallet before creating a token.", passed: Boolean(wallet) },
+    { label: "Token details valid", detail: "Name, symbol, whole-token supply, and decimals are checked.", passed: Boolean(validForm) },
+    { label: "Image selected", detail: "An accepted image up to 2 MiB is required.", passed: Boolean(imageFile) },
+    { label: "Platform fee address valid", detail: "The configured recipient must be a valid Solana public address.", passed: feeWalletValid }
+  ];
 
   async function connectWallet() {
     setError("");
@@ -96,6 +109,7 @@ function App() {
       const response = await provider.connect();
       const publicKey = response?.publicKey || provider.publicKey;
       if (!publicKey) throw new Error("The wallet did not return a public key.");
+      setSafetyAcknowledged(false);
       setWallet(new PublicKey(publicKey.toString()).toBase58());
     } catch (err) {
       setError(err?.message || "Wallet connection was cancelled.");
@@ -104,6 +118,7 @@ function App() {
 
   async function disconnectWallet() {
     try { await window.solana?.disconnect?.(); } catch { /* Wallet may already be disconnected. */ }
+    setSafetyAcknowledged(false);
     setWallet("");
   }
 
@@ -306,7 +321,7 @@ function App() {
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[.03] px-2 py-2 text-[10px] text-slate-400 sm:gap-2 sm:px-3 sm:text-xs">
           <span className={"h-1.5 w-1.5 rounded-full " + (cluster === "devnet" ? "bg-amber-300" : "bg-emerald-300")} />
-          <select aria-label="Solana cluster" disabled={busy} className="max-w-[74px] bg-transparent text-slate-200 outline-none disabled:opacity-60 sm:max-w-none" value={cluster} onChange={(e) => { setCluster(e.target.value); resetForm(); }}>
+          <select aria-label="Solana cluster" disabled={busy} className="max-w-[74px] bg-transparent text-slate-200 outline-none disabled:opacity-60 sm:max-w-none" value={cluster} onChange={(e) => { setSafetyAcknowledged(false); setCluster(e.target.value); resetForm(); }}>
             <option value="devnet">Devnet</option><option value="mainnet-beta">Mainnet</option>
           </select>
         </label>
@@ -340,6 +355,7 @@ function App() {
                 <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(e) => {
                   const file = e.target.files?.[0];
                   setError("");
+                  setSafetyAcknowledged(false);
                   setForm((current) => ({ ...current, uri: "" }));
                   if (!file) return;
                   if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
@@ -359,7 +375,19 @@ function App() {
             </div>
             {error && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[.07] p-3 text-sm leading-5 text-rose-200"><Info size={16} className="mr-2 inline" />{error}</div>}
             {stage && <div aria-live="polite" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] p-3 text-sm text-violet-100">{busy && <LoaderCircle size={15} className="mr-2 inline animate-spin" />}{!busy && <CheckCircle2 size={15} className="mr-2 inline" />}{stage}</div>}
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-300/[.05] p-3 text-xs leading-5 text-slate-300">
+              <input
+                type="checkbox"
+                className="mt-1 accent-violet-400"
+                checked={safetyAcknowledged}
+                onChange={(event) => setSafetyAcknowledged(event.target.checked)}
+                disabled={busy}
+                aria-label="Acknowledge fixed-supply and fee details"
+              />
+              <span>I reviewed the selected network, token details, 0.02 SOL platform fee plus additional rent/network fees, and understand that mint authority revocation is permanent, no freeze authority is created, and metadata remains mutable.</span>
+            </label>
             <button className="primary-btn flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm" type="submit" disabled={!canCreate}>{busy ? <LoaderCircle size={17} className="animate-spin" /> : <Rocket size={17} />}{busy ? "Creating token…" : "Create token"}{!busy && <ArrowUpRight size={16} />}</button>
+            {!safetyAcknowledged && <p className="text-center text-xs text-amber-200">Review and acknowledge the safety details to continue.</p>}
             {!wallet && <p className="text-center text-xs text-slate-500">Connect a Solana wallet to enable token creation.</p>}
             {wallet && !feeWalletValid && <p className="text-center text-xs text-amber-200">Admin setup required: configure the platform fee wallet.</p>}
           </form>
@@ -376,6 +404,20 @@ function App() {
               <div className="my-1 border-t border-dashed border-white/10" />
               <div className="flex items-center justify-between gap-4"><span className="text-xs text-slate-400">Platform fee</span><span className="mono text-xs font-bold text-slate-100">0.02 SOL</span></div>
               <div className="flex items-center justify-between gap-4"><span className="text-xs text-slate-400">Network + rent</span><span className="text-xs text-slate-300">Additional</span></div>
+              <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <div className="mb-3 flex items-center gap-2 text-xs font-bold text-white"><ShieldCheck size={15} className="text-emerald-300" /> Pre-Launch Safety Check</div>
+                <ul className="space-y-3">
+                  {safetyChecks.map((check) => <li key={check.label} className="flex items-start gap-2">
+                    {check.passed && !check.warning
+                      ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />
+                      : check.warning
+                        ? <Info size={15} className="mt-0.5 shrink-0 text-amber-300" />
+                        : <Info size={15} className="mt-0.5 shrink-0 text-slate-500" />}
+                    <span className="min-w-0"><span className={`block text-xs font-semibold ${check.warning ? "text-amber-200" : check.passed ? "text-slate-200" : "text-slate-400"}`}>{check.label}</span><span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{check.detail}</span></span>
+                  </li>)}
+                </ul>
+                <p className="mt-3 border-t border-white/10 pt-3 text-[11px] leading-5 text-slate-400">Fixed-supply design: initial supply is minted, mint authority is revoked permanently, no freeze authority is created, and metadata remains mutable. These checks do not replace reviewing the wallet transaction.</p>
+              </div>
               <div className="rounded-xl border border-violet-300/15 bg-violet-300/[.05] p-3 text-xs leading-5 text-slate-400"><Info size={14} className="mr-1.5 inline text-violet-300" />Your wallet shows the transaction for approval. Review all instructions before signing.</div>
             </div>
           </section>
