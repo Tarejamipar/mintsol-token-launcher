@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isValidUrl, shortKey, validateTokenForm } from "../src/token-validation.js";
+import { isPreLaunchReady, isValidUrl, shortKey, validateTokenForm } from "../src/token-validation.js";
 
 test("shortKey leaves short values unchanged", () => {
   assert.equal(shortKey("abc123"), "abc123");
@@ -71,4 +71,28 @@ test("validateTokenForm rejects invalid or overlong metadata URIs", () => {
   assert.equal(validateTokenForm({ ...base, uri: "javascript:alert(1)" }), false);
   assert.equal(validateTokenForm({ ...base, uri: "invalid" }), false);
   assert.equal(validateTokenForm({ ...base, uri: "https://example.com/" + "a".repeat(200) }), false);
+});
+
+const readyState = {
+  wallet: "connected-wallet",
+  feeWalletValid: true,
+  validForm: true,
+  imageFile: { name: "token.png" },
+  safetyAcknowledged: true,
+  busy: false
+};
+
+test("pre-launch readiness passes only when all safety gates are satisfied", () => {
+  assert.equal(isPreLaunchReady(readyState), true);
+  for (const key of ["wallet", "feeWalletValid", "validForm", "imageFile", "safetyAcknowledged"]) {
+    assert.equal(isPreLaunchReady({ ...readyState, [key]: key === "wallet" || key === "imageFile" ? "" : false }), false, key);
+  }
+});
+
+test("pre-launch readiness blocks while a transaction is already in progress", () => {
+  assert.equal(isPreLaunchReady({ ...readyState, busy: true }), false);
+});
+
+test("pre-launch readiness requires explicit irreversible-settings acknowledgment", () => {
+  assert.equal(isPreLaunchReady({ ...readyState, safetyAcknowledged: false }), false);
 });

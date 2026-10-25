@@ -14,6 +14,7 @@ MintSol is a Vite + React interface for creating a classic SPL token and its Met
 - Creates a Metaplex Token Metadata account with the token name, symbol, and public metadata URI in the same wallet-approved Solana transaction.
 - Adds a configurable **0.02 SOL platform fee** transfer to the same transaction.
 - Shows the mint address and Solana Explorer links after confirmation.
+- Provides a pre-launch safety checklist for the selected network, wallet, token form, image, fee recipient, and irreversible fixed-supply settings.
 - Includes a GitHub Actions production-build check.
 
 The app does not custody wallet keys. The wallet signs the transaction locally.
@@ -54,6 +55,12 @@ Compatible wallets and explorers can use this on-chain metadata to resolve the t
 - The upload endpoint checks request origin, accepted image types, image signatures, and a 2 MiB decoded file limit. It uses a shared Upstash Redis rate limit when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are configured; otherwise it falls back to best-effort per-instance limiting. Configure both shared-limit variables in Vercel to enforce the 10-request/15-minute limit across serverless instances.
 
 The Pinata JWT is never sent to the browser. Uploaded IPFS files may remain pinned even if the user rejects the wallet transaction or the Solana transaction fails.
+
+## Pre-launch safety checker
+
+Before enabling token creation, the UI checks that a wallet is connected, the token form is valid, an accepted image is selected, the platform fee recipient is a valid public Solana address, and the user explicitly acknowledges the fee and fixed-supply behavior. The checklist labels the selected network and warns when Mainnet is selected. Devnet remains the default unless `VITE_SOLANA_CLUSTER=mainnet-beta` is configured.
+
+The checklist is a user-facing guardrail, not an independent on-chain verification or a security audit. Users must still review the complete transaction in their wallet. Mint authority revocation is permanent; the mint is initialized without a freeze authority; metadata remains mutable.
 
 ## Transaction behavior
 
