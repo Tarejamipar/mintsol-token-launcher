@@ -14,7 +14,7 @@ import {
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
 import { Buffer } from "buffer";
-import { shortKey, validateTokenForm } from "./token-validation.js";
+import { isPreLaunchReady, shortKey, validateTokenForm } from "./token-validation.js";
 
 const FEE_SOL = 0.02;
 const FEE_LAMPORTS = Math.round(FEE_SOL * LAMPORTS_PER_SOL);
@@ -91,7 +91,7 @@ function App() {
   const validSupply = Number.isSafeInteger(supply) && supply > 0;
   const validDecimals = Number.isInteger(decimals) && decimals >= 0 && decimals <= 9;
   const validForm = validateTokenForm({ ...form, uri: form.uri || "https://pending.invalid/metadata.json" });
-  const canCreate = Boolean(wallet) && feeWalletValid && validForm && Boolean(imageFile) && safetyAcknowledged && !busy;
+  const canCreate = isPreLaunchReady({ wallet, feeWalletValid, validForm, imageFile, safetyAcknowledged, busy });
   const safetyChecks = [
     { label: "Network identified", detail: cluster === "devnet" ? "Solana Devnet selected for testing." : "Solana Mainnet selected; real SOL will be spent.", passed: true, warning: cluster === "mainnet-beta" },
     { label: "Wallet connected", detail: wallet ? `Connected wallet: ${shortKey(wallet)}` : "Connect a wallet before creating a token.", passed: Boolean(wallet) },
