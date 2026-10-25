@@ -31,3 +31,16 @@ export function validateTokenForm(form) {
     && new TextEncoder().encode(uri).length <= 200
     && isValidUrl(uri);
 }
+
+/**
+ * Gate token creation on the live pre-launch requirements.
+ * This is a UI safety gate, not an on-chain security audit.
+ */
+export function isPreLaunchReady({ wallet, feeWalletValid, validForm, imageFile, safetyAcknowledged, busy }) {
+  return Boolean(wallet)
+    && Boolean(feeWalletValid)
+    && Boolean(validForm)
+    && Boolean(imageFile)
+    && Boolean(safetyAcknowledged)
+    && !busy;
+}
