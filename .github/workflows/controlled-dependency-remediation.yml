@@ -1,0 +1,86 @@
+name: Controlled dependency remediation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-remediation-${{ github.ref }
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    name: Try safe npm fixes and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the committed lockfile exactly
+        run: npm ci --no-audit --no-fund
+
+      - name: Capture audit report before remediation
+        shell: bash
+        run: |
+          npm audit --json > npm-audit-before.json || true
+
+      - name: Apply non-forced npm audit fixes only
+        id: safe_fix
+        continue-on-error: true
+        run: npm audit fix --no-fund
+
+      - name: Run unit tests
+        id: tests
+        continue-on-error: true
+        run: npm test
+
+      - name: Build production bundle
+        id: build
+        continue-on-error: true
+        run: npm run build
+
+      - name: Capture audit report after remediation
+        shell: bash
+        run: |
+          npm audit --json > npm-audit-after.json || true
+          npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Write remediation summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Controlled dependency remediation"
+            echo
+            echo "- Forced or major-version upgrades: **not used**."
+            echo "- Repository write permissions: **read-only**."
+            echo "- Automatic commits or pushes: **not performed**."
+            echo "- Safe npm audit fix step outcome: `${{ steps.safe_fix.outcome }`"
+            echo "- Unit tests outcome: `${{ steps.tests.outcome }`"
+            echo "- Production build outcome: `${{ steps.build.outcome }`"
+            echo
+            echo "Review the attached package.json, package-lock.json, and audit reports. Do not merge or deploy without reviewing the diff and confirming the audit result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload proposed dependency files and audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mintsol-dependency-remediation-${{ github.run_number }
+          path: |
+            package.json
+            package-lock.json
+            npm-audit-before.json
+            npm-audit-after.json
+          if-no-files-found: error
+          retention-days: 7
