@@ -1,13 +1,15 @@
 name: Controlled dependency remediation
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dependency-remediation-${{ github.ref }
+  group: dependency-remediation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -65,9 +67,9 @@ jobs:
             echo "- Forced or major-version upgrades: **not used**."
             echo "- Repository write permissions: **read-only**."
             echo "- Automatic commits or pushes: **not performed**."
-            echo "- Safe npm audit fix step outcome: `${{ steps.safe_fix.outcome }`"
-            echo "- Unit tests outcome: `${{ steps.tests.outcome }`"
-            echo "- Production build outcome: `${{ steps.build.outcome }`"
+            echo "- Safe npm audit fix step outcome: `${{ steps.safe_fix.outcome }}`"
+            echo "- Unit tests outcome: `${{ steps.tests.outcome }}`"
+            echo "- Production build outcome: `${{ steps.build.outcome }}`"
             echo
             echo "Review the attached package.json, package-lock.json, and audit reports. Do not merge or deploy without reviewing the diff and confirming the audit result."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -76,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mintsol-dependency-remediation-${{ github.run_number }
+          name: mintsol-dependency-remediation-${{ github.run_number }}
           path: |
             package.json
             package-lock.json
