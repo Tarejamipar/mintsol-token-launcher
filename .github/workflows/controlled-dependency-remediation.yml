@@ -32,8 +32,7 @@ jobs:
 
       - name: Capture audit report before remediation
         shell: bash
-        run: |
-          npm audit --json > npm-audit-before.json || true
+        run: npm audit --json > npm-audit-before.json || true
 
       - name: Apply non-forced npm audit fixes only
         id: safe_fix
@@ -51,11 +50,12 @@ jobs:
         run: npm run build
 
       - name: Capture audit report after remediation
+        id: audit
+        continue-on-error: true
         shell: bash
         run: |
           npm audit --json > npm-audit-after.json || true
           npm audit --audit-level=high
-        continue-on-error: true
 
       - name: Write remediation summary
         if: always()
@@ -67,11 +67,12 @@ jobs:
             echo "- Forced or major-version upgrades: **not used**."
             echo "- Repository write permissions: **read-only**."
             echo "- Automatic commits or pushes: **not performed**."
-            echo "- Safe npm audit fix step outcome: `${{ steps.safe_fix.outcome }}`"
-            echo "- Unit tests outcome: `${{ steps.tests.outcome }}`"
-            echo "- Production build outcome: `${{ steps.build.outcome }}`"
+            echo "- Safe npm audit fix: `${{ steps.safe_fix.outcome }}`"
+            echo "- Unit tests: `${{ steps.tests.outcome }}`"
+            echo "- Production build: `${{ steps.build.outcome }}`"
+            echo "- High-severity audit gate: `${{ steps.audit.outcome }}`"
             echo
-            echo "Review the attached package.json, package-lock.json, and audit reports. Do not merge or deploy without reviewing the diff and confirming the audit result."
+            echo "The artifact contains proposed dependency files and before/after audit reports. Review all changes before preparing a dependency-update PR."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload proposed dependency files and audit reports
@@ -86,3 +87,12 @@ jobs:
             npm-audit-after.json
           if-no-files-found: error
           retention-days: 7
+
+      - name: Fail if validation or the high-severity audit gate failed
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.tests.outcome }}" != "success" || "${{ steps.build.outcome }}" != "success" || "${{ steps.audit.outcome }}" != "success" ]]; then
+            echo "Validation failed or high-severity vulnerabilities remain. Review the uploaded artifact."
+            exit 1
+          fi
