@@ -1,0 +1,44 @@
+name: Compatible dependency validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/compatible-dependency-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Regenerate lockfile from manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Clean install
+        run: npm ci --no-audit --no-fund
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: High-severity dependency audit
+        run: npm audit --audit-level=high
+      - name: Upload regenerated dependency files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatible-dependency-validation
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: error
